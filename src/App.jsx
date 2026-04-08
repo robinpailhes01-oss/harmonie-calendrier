@@ -6,6 +6,9 @@ const MN=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Se
 const DL=["L","M","M","J","V","S","D"],DFL=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
 const TX={nuit_classique:150,nuit_prestige:350,sortie_mer_2h:380,sortie_mer_3h:550,sortie_mer_4h:750};
 const FM={nuit_classique:{c:"#007AFF",l:"Classique",i:"🌙"},nuit_prestige:{c:"#AF52DE",l:"Prestige",i:"✨"},sortie_mer_2h:{c:"#30D158",l:"Sortie 2h",i:"⛵"},sortie_mer_3h:{c:"#30D158",l:"Sortie 3h",i:"⛵"},sortie_mer_4h:{c:"#30D158",l:"Sortie 4h",i:"⛵"}};
+const TYPES=[{v:"nuit_classique",l:"Nuit Classique 150€"},{v:"nuit_prestige",l:"Nuit Prestige 350€"},{v:"sortie_mer_2h",l:"Sortie 2h 380€"},{v:"sortie_mer_3h",l:"Sortie 3h 550€"},{v:"sortie_mer_4h",l:"Sortie 4h 750€"}];
+const STATUTS=[{v:"nouveau",l:"Nouveau"},{v:"en_conversation",l:"En conversation"},{v:"qualifie",l:"Qualifié"},{v:"reserve",l:"Réservé"},{v:"termine",l:"Terminé"},{v:"perdu",l:"Perdu"}];
+const TEMPS=[{v:"chaud",l:"Chaud"},{v:"tiede",l:"Tiède"},{v:"froid",l:"Froid"}];
 
 function pda(ds,ref){if(!ds)return null;const d=ds.toLowerCase().trim(),y=ref.getFullYear(),cm=ref.getMonth(),cd=ref.getDate();
 if(/attendre|pas encore|incertain|sait pas|aucune|planning/.test(d))return null;
@@ -24,13 +27,17 @@ const st=`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;4
 *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 @keyframes au{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
 @keyframes su{from{transform:translateY(100%)}to{transform:translateY(0)}}
-.au{animation:au .2s ease both}.su{animation:su .25s cubic-bezier(.32,.72,0,1) both}`;
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.au{animation:au .2s ease both}.su{animation:su .25s cubic-bezier(.32,.72,0,1) both}
+.fade{animation:fade .15s ease both}
+input,select,textarea{font-family:inherit;outline:none}`;
 
 export default function App(){
   const[dk,setDk]=useState(true);const[cur,setCur]=useState(new Date());
   const[allLeads,setAllLeads]=useState([]);const[datedLeads,setDatedLeads]=useState([]);
   const[wx,setWx]=useState({});const[sel,setSel]=useState(null);const[tab,setTab]=useState("all");
   const[fin,setFin]=useState({rev:0,dep:0,nR:0,nD:0});
+  const[edit,setEdit]=useState(null);const[saving,setSaving]=useState(false);
   const W=useW();const mob=W<768;
   const yr=cur.getFullYear(),mo=cur.getMonth();
   const fd=(new Date(yr,mo,1).getDay()+6)%7,dim=new Date(yr,mo+1,0).getDate();
@@ -43,7 +50,7 @@ export default function App(){
   const sb=useCallback(async(p)=>{const r=await fetch(`${SB}/rest/v1/${p}`,{headers:{apikey:SK,Authorization:`Bearer ${SK}`}});return r.json();},[]);
 
   const load=useCallback(async()=>{
-    try{const d=await sb("leads?select=*&statut=not.eq.perdu");
+    try{const d=await sb("leads?select=*&statut=not.eq.perdu&statut=not.eq.termine");
     const f=d.filter(l=>!["robinpailhes","robinai_consulting"].includes(l.instagram_username)).sort((a,b)=>(b.score||0)-(a.score||0));
     setAllLeads(f);setDatedLeads(f.filter(l=>l.date_souhaitee).map(l=>({...l,pd:pda(l.date_souhaitee,now)})));}catch(e){}
     try{const[rv,dp]=await Promise.all([sb("revenus?select=montant"),sb("depenses?select=montant")]);
@@ -55,6 +62,29 @@ export default function App(){
     setWx(m);}catch(e){}
   },[yr,mo,now,sb]);
   useEffect(()=>{load();},[load]);
+
+  const saveLead=async(updates)=>{
+    if(!edit||!edit.id)return;
+    setSaving(true);
+    try{
+      const cleaned={};
+      for(const k in updates){
+        if(updates[k]!==undefined&&updates[k]!==edit[k]){
+          cleaned[k]=updates[k]===""?null:updates[k];
+        }
+      }
+      if(Object.keys(cleaned).length>0){
+        await fetch(`${SB}/rest/v1/leads?id=eq.${edit.id}`,{
+          method:"PATCH",
+          headers:{apikey:SK,Authorization:`Bearer ${SK}`,"Content-Type":"application/json","Prefer":"return=minimal"},
+          body:JSON.stringify(cleaned)
+        });
+      }
+      await load();
+      setEdit(null);
+    }catch(e){alert("Erreur lors de la sauvegarde");}
+    setSaving(false);
+  };
 
   const lfd=d=>datedLeads.filter(l=>l.pd&&l.pd.getFullYear()===yr&&l.pd.getMonth()===mo&&l.pd.getDate()===d);
   const wfd=d=>wx[`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`]||null;
@@ -78,7 +108,6 @@ export default function App(){
   const f="-apple-system,BlinkMacSystemFont,'Inter','Helvetica Neue',sans-serif";
   const Chip=({children,color})=><span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:20,background:`${color}14`,color}}>{children}</span>;
 
-  // Dot color logic for calendar
   const dotColor=(dl)=>{
     if(dl.some(l=>l.statut==="reserve"))return c.gn;
     if(dl.some(l=>l.temperature==="chaud"))return c.red;
@@ -91,7 +120,7 @@ export default function App(){
     const dl=l.pd?Math.max(0,Math.round((l.pd-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5)):null;
     const ago=l.derniere_interaction?Math.round((now-new Date(l.derniere_interaction))/864e5):null;
     return(
-      <div className="au" style={{background:c.s,borderRadius:compact?10:14,padding:compact?10:16,border:`0.5px solid ${c.bd}`}}>
+      <div className="au" onClick={(e)=>{e.stopPropagation();setEdit(l);}} style={{background:c.s,borderRadius:compact?10:14,padding:compact?10:16,border:`0.5px solid ${c.bd}`,cursor:"pointer",transition:"transform 0.1s"}} onMouseEnter={e=>e.currentTarget.style.transform="scale(1.01)"} onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div style={{display:"flex",alignItems:"center",gap:compact?6:8,flex:1,minWidth:0}}>
             <div style={{width:compact?24:32,height:compact?24:32,borderRadius:compact?7:10,background:`${fm.c}12`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:compact?11:14,flexShrink:0}}>{fm.i}</div>
@@ -121,16 +150,34 @@ export default function App(){
           {l.telephone&&<span style={{color:c.gn}}>📱 {l.telephone}</span>}
           {ago!==null&&<span style={{marginLeft:"auto"}}>{ago===0?"Auj.":ago===1?"Hier":`${ago}j`}</span>}
         </div>}
-        {!compact&&!rv&&l.date_souhaitee&&l.pd&&<div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:c.or,marginTop:8,padding:"5px 8px",background:`${c.or}08`,borderRadius:8,fontWeight:500}}>
-          <div style={{width:6,height:6,borderRadius:"50%",background:l.temperature==="chaud"?c.red:c.or}}/>En attente de confirmation
-        </div>}
       </div>
     );
   };
 
+  const inputStyle={width:"100%",padding:"10px 12px",borderRadius:10,border:`0.5px solid ${c.bd}`,background:c.s2,color:c.tx,fontSize:14,marginTop:4};
+  const labelStyle={fontSize:11,fontWeight:600,color:c.tx2,letterSpacing:"0.02em",textTransform:"uppercase"};
+
   return(
     <div style={{background:c.bg,color:c.tx,minHeight:"100vh",fontFamily:f}}>
       <style>{st}</style>
+
+      {/* EDIT MODAL */}
+      {edit&&(
+        <div className="fade" onClick={()=>!saving&&setEdit(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(8px)",zIndex:200,display:"flex",alignItems:mob?"flex-end":"center",justifyContent:"center",padding:mob?0:20}}>
+          <div className={mob?"su":"au"} onClick={e=>e.stopPropagation()} style={{background:c.s,borderRadius:mob?"20px 20px 0 0":18,padding:mob?20:28,width:mob?"100%":480,maxHeight:mob?"90vh":"85vh",overflowY:"auto",border:`0.5px solid ${c.bd}`}}>
+            {mob&&<div style={{width:36,height:4,borderRadius:2,background:c.s3,margin:"0 auto 16px"}}/>}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+              <div>
+                <div style={{fontSize:11,color:c.tx3,fontWeight:500,letterSpacing:"0.04em",textTransform:"uppercase"}}>Modifier prospect</div>
+                <div style={{fontSize:22,fontWeight:700,letterSpacing:"-0.03em",marginTop:2}}>{edit.prenom?.replace(/^\w/,x=>x.toUpperCase())||edit.instagram_username}</div>
+              </div>
+              <button onClick={()=>setEdit(null)} disabled={saving} style={{background:c.s2,border:"none",borderRadius:10,width:32,height:32,fontSize:18,color:c.tx2,cursor:"pointer"}}>×</button>
+            </div>
+
+            <EditForm lead={edit} onSave={saveLead} saving={saving} c={c} inputStyle={inputStyle} labelStyle={labelStyle}/>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <header style={{borderBottom:`0.5px solid ${c.bd}`,background:dk?"rgba(0,0,0,0.8)":"rgba(245,245,247,0.8)",backdropFilter:"saturate(180%) blur(20px)",WebkitBackdropFilter:"saturate(180%) blur(20px)",position:"sticky",top:0,zIndex:50}}>
@@ -149,7 +196,6 @@ export default function App(){
             <button onClick={()=>setDk(!dk)} style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:10,padding:"6px 10px",cursor:"pointer",fontSize:14,color:c.tx}}>{dk?"☀️":"🌙"}</button>
           </div>
         </div>
-        {/* KPIs */}
         <div style={{display:"flex",borderTop:`0.5px solid ${c.bd}`,overflow:"auto"}}>
           {[{l:"Revenus",v:`${fin.rev}€`,s:`${fin.nR} op.`,cl:c.gn},{l:"Dépenses",v:`${fin.dep}€`,s:`${fin.nD} op.`,cl:c.red},
             {l:"Résultat",v:`${profit>=0?"+":""}${profit}€`,s:profit>=0?"Positif":"Déficit",cl:profit>=0?c.gn:c.red},
@@ -176,10 +222,9 @@ export default function App(){
       </div>
 
       <div style={{display:"flex",flexDirection:mob?"column":"row",padding:mob?"0 12px 16px":"0 28px 24px",gap:mob?12:20}}>
-        {/* Grid */}
         <div style={{flex:1}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
-            {(mob?DL:DFL).map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:500,color:c.tx3,padding:"4px 0"}}>{d}</div>)}
+            {(mob?DL:DFL).map((d,idx)=><div key={idx} style={{textAlign:"center",fontSize:11,fontWeight:500,color:c.tx3,padding:"4px 0"}}>{d}</div>)}
             {Array.from({length:fd}).map((_,i)=><div key={`e${i}`} style={{minHeight:mob?56:108}}/>)}
             {Array.from({length:dim}).map((_,i)=>{
               const day=i+1,dl=lfd(day),w=wfd(day),td=itd(day),s=sel===day;
@@ -189,19 +234,15 @@ export default function App(){
                   <div style={{display:"flex",justifyContent:"center",marginBottom:mob?2:4}}>
                     <div style={{width:mob?26:30,height:mob?26:30,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:mob?12:14,fontWeight:td?600:400,letterSpacing:"-0.02em",background:td?c.ac:"transparent",color:td?"#fff":s?c.ac:c.tx}}>{day}</div>
                   </div>
-                  {/* Dot: red=chaud, orange=tiède, green=réservé */}
                   {dc&&<div style={{position:"absolute",top:mob?3:5,right:mob?6:10}}><div style={{width:mob?5:7,height:mob?5:7,borderRadius:"50%",background:dc}}/></div>}
-                  {/* Weather desktop */}
                   {!mob&&w&&<div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:2,marginBottom:2}}>
                     <span style={{fontSize:10}}>{wi(w.code)}</span>
                     <span style={{fontSize:9,fontWeight:500,color:c.tx3}}>{w.hi}°</span>
                     {w.wave&&<span style={{fontSize:8,color:parseFloat(w.wave)>=1.5?c.red:c.tx3}}>🌊{w.wave}</span>}
                   </div>}
-                  {/* Names desktop */}
                   {!mob&&dl.slice(0,2).map((l,idx)=>{const fm=FM[l.type_interet]||{c:c.tx3};return(
-                    <div key={idx} style={{fontSize:9,fontWeight:500,color:fm.c,textAlign:"center",lineHeight:"13px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",padding:"0 2px"}}>{l.prenom?.replace(/^\w/,x=>x.toUpperCase())||l.instagram_username}</div>);})}
+                    <div key={idx} onClick={(e)=>{e.stopPropagation();setEdit(l);}} style={{fontSize:9,fontWeight:500,color:fm.c,textAlign:"center",lineHeight:"13px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",padding:"0 2px",cursor:"pointer"}}>{l.prenom?.replace(/^\w/,x=>x.toUpperCase())||l.instagram_username}</div>);})}
                   {!mob&&dl.length>2&&<div style={{fontSize:8,color:c.tx3,textAlign:"center"}}>+{dl.length-2}</div>}
-                  {/* Mobile dots for multiple leads */}
                   {mob&&dl.length>0&&<div style={{display:"flex",justifyContent:"center",gap:2,marginTop:1}}>
                     {dl.slice(0,3).map((l,idx)=><span key={idx} style={{width:4,height:4,borderRadius:"50%",background:l.temperature==="chaud"?c.red:l.temperature==="tiede"?c.or:c.tx3}}/>)}
                   </div>}
@@ -211,7 +252,6 @@ export default function App(){
           </div>
         </div>
 
-        {/* Desktop Panel */}
         {!mob&&sel&&(
           <div style={{width:300,flexShrink:0}} className="au">
             <div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:16,padding:20,position:"sticky",top:150}}>
@@ -235,8 +275,7 @@ export default function App(){
         )}
       </div>
 
-      {/* Mobile Drawer */}
-      {mob&&sel&&(
+      {mob&&sel&&!edit&&(
         <div className="su" style={{position:"fixed",bottom:0,left:0,right:0,background:dk?"rgba(28,28,30,0.95)":"rgba(255,255,255,0.95)",backdropFilter:"saturate(180%) blur(20px)",borderTop:`0.5px solid ${c.bd}`,borderRadius:"16px 16px 0 0",padding:16,maxHeight:"60vh",overflowY:"auto",zIndex:100}}>
           <div style={{width:36,height:4,borderRadius:2,background:c.s3,margin:"0 auto 14px"}}/>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
@@ -252,7 +291,6 @@ export default function App(){
         </div>
       )}
 
-      {/* Prospects ce mois */}
       {mP.length>0&&<div style={{padding:mob?"0 12px 16px":"0 28px 24px"}}>
         <div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:16,padding:mob?16:24}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
@@ -265,7 +303,6 @@ export default function App(){
         </div>
       </div>}
 
-      {/* Mois suivants */}
       {up.filter(l=>l.pd?.getMonth()!==mo||l.pd?.getFullYear()!==yr).length>0&&(
         <div style={{padding:mob?"0 12px 16px":"0 28px 24px"}}>
           <div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:16,padding:mob?16:24}}>
@@ -278,7 +315,7 @@ export default function App(){
                   <span style={{fontSize:14,fontWeight:600}}>{MN[m2]}</span><div style={{flex:1,height:0.5,background:c.bd}}/><span style={{fontSize:12,color:c.tx2}}>{ml.length} · {mp}€</span>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(auto-fill,minmax(300px,1fr))",gap:8}}>
-                  {ml.map((l,i)=><div key={i} onClick={()=>{setCur(new Date(l.pd.getFullYear(),l.pd.getMonth(),1));setSel(l.pd.getDate());window.scrollTo({top:0,behavior:"smooth"});}} style={{cursor:"pointer"}}><Card l={l} compact={mob}/></div>)}
+                  {ml.map((l,i)=><Card key={i} l={l} compact={mob}/>)}
                 </div>
               </div>);
             })}
@@ -286,15 +323,12 @@ export default function App(){
         </div>
       )}
 
-      {/* ALL PROSPECTS — Full CRM with tabs */}
       <div style={{padding:mob?"0 12px 28px":"0 28px 32px"}}>
         <div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:16,padding:mob?16:24}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
             <div style={{fontSize:mob?17:20,fontWeight:700,letterSpacing:"-0.04em"}}>Tous les prospects</div>
             <span style={{fontSize:12,color:c.tx3}}>{allLeads.length} contacts</span>
           </div>
-
-          {/* Tabs */}
           <div style={{display:"flex",gap:0,marginBottom:16,marginTop:8,borderRadius:10,background:c.s2,padding:2}}>
             {[{k:"all",l:"Tous",n:allLeads.length},{k:"chaud",l:"Chauds",n:allLeads.filter(l=>l.temperature==="chaud").length,cl:c.red},
               {k:"tiede",l:"Tièdes",n:allLeads.filter(l=>l.temperature==="tiede").length,cl:c.or},
@@ -307,13 +341,12 @@ export default function App(){
               </button>
             ))}
           </div>
-
           <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(auto-fill,minmax(300px,1fr))",gap:6}}>
             {filtered.map((l,i)=>{
               const fm=FM[l.type_interet]||{c:c.tx3,l:"—",i:"👤"};
               const ago=l.derniere_interaction?Math.round((now-new Date(l.derniere_interaction))/864e5):null;
               return(
-                <div key={i} style={{background:c.s2,borderRadius:12,padding:mob?10:12,border:`0.5px solid ${c.bd}`,display:"flex",alignItems:"center",gap:10}}>
+                <div key={i} onClick={()=>setEdit(l)} style={{background:c.s2,borderRadius:12,padding:mob?10:12,border:`0.5px solid ${c.bd}`,display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
                   <div style={{width:34,height:34,borderRadius:10,background:`${fm.c}10`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>{fm.i}</div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -336,6 +369,87 @@ export default function App(){
             })}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function EditForm({lead,onSave,saving,c,inputStyle,labelStyle}){
+  const[f,setF]=useState({
+    prenom:lead.prenom||"",
+    email:lead.email||"",
+    telephone:lead.telephone||"",
+    type_interet:lead.type_interet||"",
+    date_souhaitee:lead.date_souhaitee||"",
+    occasion:lead.occasion||"",
+    nombre_personnes:lead.nombre_personnes||"",
+    statut:lead.statut||"nouveau",
+    temperature:lead.temperature||"froid",
+    score:lead.score||0,
+    notes:lead.notes||""
+  });
+  const upd=(k,v)=>setF({...f,[k]:v});
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div>
+        <label style={labelStyle}>Prénom</label>
+        <input value={f.prenom} onChange={e=>upd("prenom",e.target.value)} style={inputStyle}/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div>
+          <label style={labelStyle}>Email</label>
+          <input value={f.email} onChange={e=>upd("email",e.target.value)} style={inputStyle}/>
+        </div>
+        <div>
+          <label style={labelStyle}>Téléphone</label>
+          <input value={f.telephone} onChange={e=>upd("telephone",e.target.value)} style={inputStyle}/>
+        </div>
+      </div>
+      <div>
+        <label style={labelStyle}>Type de prestation</label>
+        <select value={f.type_interet} onChange={e=>upd("type_interet",e.target.value)} style={inputStyle}>
+          <option value="">— Aucun —</option>
+          {TYPES.map(t=><option key={t.v} value={t.v}>{t.l}</option>)}
+        </select>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10}}>
+        <div>
+          <label style={labelStyle}>Date souhaitée</label>
+          <input value={f.date_souhaitee} onChange={e=>upd("date_souhaitee",e.target.value)} placeholder="ex: 15 mai, vendredi 20" style={inputStyle}/>
+        </div>
+        <div>
+          <label style={labelStyle}>Pers.</label>
+          <input type="number" value={f.nombre_personnes} onChange={e=>upd("nombre_personnes",e.target.value?parseInt(e.target.value):"")} style={inputStyle}/>
+        </div>
+      </div>
+      <div>
+        <label style={labelStyle}>Occasion</label>
+        <input value={f.occasion} onChange={e=>upd("occasion",e.target.value)} style={inputStyle}/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div>
+          <label style={labelStyle}>Statut</label>
+          <select value={f.statut} onChange={e=>upd("statut",e.target.value)} style={inputStyle}>
+            {STATUTS.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={labelStyle}>Température</label>
+          <select value={f.temperature} onChange={e=>upd("temperature",e.target.value)} style={inputStyle}>
+            {TEMPS.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label style={labelStyle}>Score (/100)</label>
+        <input type="number" min="0" max="100" value={f.score} onChange={e=>upd("score",parseInt(e.target.value)||0)} style={inputStyle}/>
+      </div>
+      <div>
+        <label style={labelStyle}>Notes</label>
+        <textarea value={f.notes} onChange={e=>upd("notes",e.target.value)} rows={3} style={{...inputStyle,resize:"vertical",fontFamily:"inherit"}}/>
+      </div>
+      <div style={{display:"flex",gap:10,marginTop:8}}>
+        <button onClick={()=>onSave(f)} disabled={saving} style={{flex:1,background:c.ac,color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:600,cursor:"pointer",letterSpacing:"-0.01em",opacity:saving?0.5:1}}>{saving?"Sauvegarde…":"Enregistrer"}</button>
       </div>
     </div>
   );
