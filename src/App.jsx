@@ -38,6 +38,7 @@ export default function App(){
   const[wx,setWx]=useState({});const[sel,setSel]=useState(null);const[tab,setTab]=useState("all");
   const[fin,setFin]=useState({rev:0,dep:0,nR:0,nD:0});
   const[edit,setEdit]=useState(null);const[saving,setSaving]=useState(false);
+  const[creating,setCreating]=useState(false);
   const W=useW();const mob=W<768;
   const yr=cur.getFullYear(),mo=cur.getMonth();
   const fd=(new Date(yr,mo,1).getDay()+6)%7,dim=new Date(yr,mo+1,0).getDate();
@@ -83,6 +84,47 @@ export default function App(){
       await load();
       setEdit(null);
     }catch(e){alert("Erreur lors de la sauvegarde");}
+    setSaving(false);
+  };
+
+  const createLead=async(data)=>{
+    setSaving(true);
+    try{
+      const cleaned={};
+      for(const k in data){
+        if(data[k]!==undefined&&data[k]!==""&&data[k]!==null){
+          cleaned[k]=data[k];
+        }
+      }
+      cleaned.instagram_username=cleaned.instagram_username||("manuel_"+Date.now());
+      cleaned.source=cleaned.source||"manuel";
+      cleaned.statut=cleaned.statut||"nouveau";
+      cleaned.temperature=cleaned.temperature||"tiede";
+      cleaned.score=cleaned.score||50;
+      cleaned.nombre_messages=0;
+      const r=await fetch(`${SB}/rest/v1/leads`,{
+        method:"POST",
+        headers:{apikey:SK,Authorization:`Bearer ${SK}`,"Content-Type":"application/json","Prefer":"return=minimal"},
+        body:JSON.stringify(cleaned)
+      });
+      if(!r.ok){const t=await r.text();throw new Error(t);}
+      await load();
+      setCreating(false);
+    }catch(e){alert("Erreur lors de la création : "+e.message);}
+    setSaving(false);
+  };
+
+  const deleteLead=async(leadId)=>{
+    if(!confirm("Supprimer définitivement ce prospect ? Cette action est irréversible."))return;
+    setSaving(true);
+    try{
+      await fetch(`${SB}/rest/v1/leads?id=eq.${leadId}`,{
+        method:"DELETE",
+        headers:{apikey:SK,Authorization:`Bearer ${SK}`,"Prefer":"return=minimal"}
+      });
+      await load();
+      setEdit(null);
+    }catch(e){alert("Erreur lors de la suppression");}
     setSaving(false);
   };
 
@@ -161,6 +203,23 @@ export default function App(){
     <div style={{background:c.bg,color:c.tx,minHeight:"100vh",fontFamily:f}}>
       <style>{st}</style>
 
+      {/* CREATE MODAL */}
+      {creating&&(
+        <div className="fade" onClick={()=>!saving&&setCreating(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(8px)",zIndex:200,display:"flex",alignItems:mob?"flex-end":"center",justifyContent:"center",padding:mob?0:20}}>
+          <div className={mob?"su":"au"} onClick={e=>e.stopPropagation()} style={{background:c.s,borderRadius:mob?"20px 20px 0 0":18,padding:mob?20:28,width:mob?"100%":480,maxHeight:mob?"90vh":"85vh",overflowY:"auto",border:`0.5px solid ${c.bd}`}}>
+            {mob&&<div style={{width:36,height:4,borderRadius:2,background:c.s3,margin:"0 auto 16px"}}/>}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+              <div>
+                <div style={{fontSize:11,color:c.tx3,fontWeight:500,letterSpacing:"0.04em",textTransform:"uppercase"}}>Nouveau prospect</div>
+                <div style={{fontSize:22,fontWeight:700,letterSpacing:"-0.03em",marginTop:2}}>Ajouter manuellement</div>
+              </div>
+              <button onClick={()=>setCreating(false)} disabled={saving} style={{background:c.s2,border:"none",borderRadius:10,width:32,height:32,fontSize:18,color:c.tx2,cursor:"pointer"}}>×</button>
+            </div>
+            <CreateForm onSave={createLead} saving={saving} c={c} inputStyle={inputStyle} labelStyle={labelStyle}/>
+          </div>
+        </div>
+      )}
+
       {/* EDIT MODAL */}
       {edit&&(
         <div className="fade" onClick={()=>!saving&&setEdit(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(8px)",zIndex:200,display:"flex",alignItems:mob?"flex-end":"center",justifyContent:"center",padding:mob?0:20}}>
@@ -174,7 +233,7 @@ export default function App(){
               <button onClick={()=>setEdit(null)} disabled={saving} style={{background:c.s2,border:"none",borderRadius:10,width:32,height:32,fontSize:18,color:c.tx2,cursor:"pointer"}}>×</button>
             </div>
 
-            <EditForm lead={edit} onSave={saveLead} saving={saving} c={c} inputStyle={inputStyle} labelStyle={labelStyle}/>
+            <EditForm lead={edit} onSave={saveLead} onDelete={deleteLead} saving={saving} c={c} inputStyle={inputStyle} labelStyle={labelStyle}/>
           </div>
         </div>
       )}
@@ -193,6 +252,7 @@ export default function App(){
               <span style={{display:"flex",alignItems:"center",gap:3,marginLeft:6}}><span style={{width:6,height:6,borderRadius:"50%",background:c.or}}/>Tiède</span>
               <span style={{display:"flex",alignItems:"center",gap:3,marginLeft:6}}><span style={{width:6,height:6,borderRadius:"50%",background:c.gn}}/>Réservé</span>
             </div>}
+            <button onClick={()=>setCreating(true)} style={{background:c.ac,border:"none",borderRadius:10,padding:mob?"6px 10px":"6px 14px",cursor:"pointer",fontSize:13,color:"#fff",fontWeight:600,letterSpacing:"-0.01em"}}>+ {mob?"":"Nouveau lead"}</button>
             <button onClick={()=>setDk(!dk)} style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:10,padding:"6px 10px",cursor:"pointer",fontSize:14,color:c.tx}}>{dk?"☀️":"🌙"}</button>
           </div>
         </div>
@@ -374,7 +434,7 @@ export default function App(){
   );
 }
 
-function EditForm({lead,onSave,saving,c,inputStyle,labelStyle}){
+function EditForm({lead,onSave,onDelete,saving,c,inputStyle,labelStyle}){
   const[f,setF]=useState({
     prenom:lead.prenom||"",
     email:lead.email||"",
@@ -449,8 +509,88 @@ function EditForm({lead,onSave,saving,c,inputStyle,labelStyle}){
         <textarea value={f.notes} onChange={e=>upd("notes",e.target.value)} rows={3} style={{...inputStyle,resize:"vertical",fontFamily:"inherit"}}/>
       </div>
       <div style={{display:"flex",gap:10,marginTop:8}}>
+        <button onClick={()=>onDelete(lead.id)} disabled={saving} style={{background:"transparent",color:c.red,border:`0.5px solid ${c.red}`,borderRadius:12,padding:"14px 18px",fontSize:14,fontWeight:600,cursor:"pointer",letterSpacing:"-0.01em",opacity:saving?0.5:1}}>Supprimer</button>
         <button onClick={()=>onSave(f)} disabled={saving} style={{flex:1,background:c.ac,color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:600,cursor:"pointer",letterSpacing:"-0.01em",opacity:saving?0.5:1}}>{saving?"Sauvegarde…":"Enregistrer"}</button>
       </div>
+    </div>
+  );
+}
+
+function CreateForm({onSave,saving,c,inputStyle,labelStyle}){
+  const[f,setF]=useState({
+    prenom:"",
+    email:"",
+    telephone:"",
+    type_interet:"",
+    date_souhaitee:"",
+    occasion:"",
+    nombre_personnes:"",
+    statut:"nouveau",
+    temperature:"tiede",
+    score:50,
+    notes:""
+  });
+  const upd=(k,v)=>setF({...f,[k]:v});
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div>
+        <label style={labelStyle}>Prénom *</label>
+        <input value={f.prenom} onChange={e=>upd("prenom",e.target.value)} placeholder="Nom du client" style={inputStyle}/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div>
+          <label style={labelStyle}>Email</label>
+          <input value={f.email} onChange={e=>upd("email",e.target.value)} placeholder="email@exemple.fr" style={inputStyle}/>
+        </div>
+        <div>
+          <label style={labelStyle}>Téléphone</label>
+          <input value={f.telephone} onChange={e=>upd("telephone",e.target.value)} placeholder="06 XX XX XX XX" style={inputStyle}/>
+        </div>
+      </div>
+      <div>
+        <label style={labelStyle}>Type de prestation</label>
+        <select value={f.type_interet} onChange={e=>upd("type_interet",e.target.value)} style={inputStyle}>
+          <option value="">— Aucun —</option>
+          {TYPES.map(t=><option key={t.v} value={t.v}>{t.l}</option>)}
+        </select>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10}}>
+        <div>
+          <label style={labelStyle}>Date souhaitée</label>
+          <input value={f.date_souhaitee} onChange={e=>upd("date_souhaitee",e.target.value)} placeholder="ex: 15 mai" style={inputStyle}/>
+        </div>
+        <div>
+          <label style={labelStyle}>Pers.</label>
+          <input type="number" value={f.nombre_personnes} onChange={e=>upd("nombre_personnes",e.target.value?parseInt(e.target.value):"")} style={inputStyle}/>
+        </div>
+      </div>
+      <div>
+        <label style={labelStyle}>Occasion</label>
+        <input value={f.occasion} onChange={e=>upd("occasion",e.target.value)} placeholder="anniversaire, EVJF..." style={inputStyle}/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div>
+          <label style={labelStyle}>Statut</label>
+          <select value={f.statut} onChange={e=>upd("statut",e.target.value)} style={inputStyle}>
+            {STATUTS.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={labelStyle}>Température</label>
+          <select value={f.temperature} onChange={e=>upd("temperature",e.target.value)} style={inputStyle}>
+            {TEMPS.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label style={labelStyle}>Score (/100)</label>
+        <input type="number" min="0" max="100" value={f.score} onChange={e=>upd("score",parseInt(e.target.value)||0)} style={inputStyle}/>
+      </div>
+      <div>
+        <label style={labelStyle}>Notes</label>
+        <textarea value={f.notes} onChange={e=>upd("notes",e.target.value)} rows={3} placeholder="Comment vous l'avez rencontré, infos utiles..." style={{...inputStyle,resize:"vertical",fontFamily:"inherit"}}/>
+      </div>
+      <button onClick={()=>{if(!f.prenom){alert("Le prénom est obligatoire");return;}onSave(f);}} disabled={saving} style={{background:c.ac,color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:600,cursor:"pointer",letterSpacing:"-0.01em",opacity:saving?0.5:1,marginTop:8}}>{saving?"Création…":"Créer le prospect"}</button>
     </div>
   );
 }
