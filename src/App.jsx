@@ -508,6 +508,7 @@ function MiniCard({l,c,now,lc,setEdit,FM}){
 }
 
 function EditForm({lead,onSave,onDelete,saving,c,inputStyle,labelStyle}){
+  const prixBase=TX[lead.type_interet]||0;
   const[f,setF]=useState({
     prenom:lead.prenom||"",email:lead.email||"",telephone:lead.telephone||"",
     type_interet:lead.type_interet||"",date_souhaitee:lead.date_souhaitee||"",
@@ -515,10 +516,13 @@ function EditForm({lead,onSave,onDelete,saving,c,inputStyle,labelStyle}){
     statut:lead.statut||"nouveau",temperature:lead.temperature||"froid",
     score:lead.score||0,notes:lead.notes||"",
     acompte_recu:lead.acompte_recu||"",
-    montant_total_encaisse:lead.montant_total_encaisse||""
+    montant_total_encaisse:lead.montant_total_encaisse||"",
+    prix_custom:lead.prix_custom||""
   });
   const upd=(k,v)=>setF({...f,[k]:v});
-  const prix=TX[f.type_interet]||0;
+  // prix = custom si défini, sinon prix standard de la prestation
+  const prixStandard=TX[f.type_interet]||0;
+  const prix=parseFloat(f.prix_custom||0)||prixStandard;
   const acompte=parseFloat(f.acompte_recu||0);
   const restant=prix>0?prix-acompte:0;
 
@@ -541,32 +545,45 @@ function EditForm({lead,onSave,onDelete,saving,c,inputStyle,labelStyle}){
       </div>
 
       {/* SECTION FINANCES */}
-      {prix>0&&<div style={{background:`${c.gn}08`,border:`0.5px solid ${c.gn}30`,borderRadius:10,padding:12}}>
+      {prixStandard>0&&<div style={{background:`${c.gn}08`,border:`0.5px solid ${c.gn}30`,borderRadius:10,padding:12}}>
         <div style={{fontSize:11,fontWeight:600,color:c.tx2,letterSpacing:"0.02em",textTransform:"uppercase",marginBottom:10}}>💰 Finances</div>
-        <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
-          <div style={{flex:1,background:c.s2,borderRadius:8,padding:"8px 10px",minWidth:80}}>
-            <div style={{fontSize:9,color:c.tx3}}>Prix total</div>
-            <div style={{fontSize:16,fontWeight:700,color:c.tx}}>{prix}€</div>
+        <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+          <div style={{flex:1,background:c.s2,borderRadius:8,padding:"8px 10px",minWidth:80,border:f.prix_custom&&parseFloat(f.prix_custom)!==prixStandard?`1px solid ${c.or}50`:"none"}}>
+            <div style={{fontSize:9,color:c.tx3,marginBottom:2}}>
+              Prix total {f.prix_custom&&parseFloat(f.prix_custom)!==prixStandard&&<span style={{color:c.or,fontSize:8,marginLeft:2}}>✎ offre spéciale</span>}
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:2}}>
+              <input type="number"
+                value={f.prix_custom!==undefined&&f.prix_custom!==""?f.prix_custom:prixStandard}
+                onChange={e=>upd("prix_custom",e.target.value)}
+                style={{width:"100%",background:"transparent",border:"none",fontSize:16,fontWeight:700,
+                  color:f.prix_custom&&parseFloat(f.prix_custom)!==prixStandard?c.or:c.tx,
+                  padding:0,outline:"none"}}
+              />
+              <span style={{fontSize:12,color:c.tx3,flexShrink:0}}>€</span>
+            </div>
+            {f.prix_custom&&parseFloat(f.prix_custom)!==prixStandard&&
+              <button onClick={()=>upd("prix_custom","")} style={{fontSize:8,color:c.tx3,background:"none",border:"none",cursor:"pointer",padding:0,marginTop:2}}>
+                ↩ Tarif standard ({prixStandard}€)
+              </button>}
           </div>
           <div style={{flex:1,background:c.s2,borderRadius:8,padding:"8px 10px",minWidth:80}}>
-            <div style={{fontSize:9,color:c.tx3}}>Reçu</div>
+            <div style={{fontSize:9,color:c.tx3,marginBottom:2}}>Reçu</div>
             <div style={{fontSize:16,fontWeight:700,color:acompte>=prix?c.gn:acompte>0?c.or:c.tx3}}>{acompte}€</div>
           </div>
           <div style={{flex:1,background:c.s2,borderRadius:8,padding:"8px 10px",minWidth:80}}>
-            <div style={{fontSize:9,color:c.tx3}}>Restant</div>
-            <div style={{fontSize:16,fontWeight:700,color:restant>0?c.or:c.gn}}>{restant}€</div>
+            <div style={{fontSize:9,color:c.tx3,marginBottom:2}}>Restant</div>
+            <div style={{fontSize:16,fontWeight:700,color:restant<=0?c.gn:c.or}}>{restant<=0?"✓":restant+"€"}</div>
           </div>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          <div><label style={labelStyle}>Acompte reçu (€)</label><input type="number" min="0" max={prix} value={f.acompte_recu} onChange={e=>upd("acompte_recu",e.target.value)} placeholder="0" style={inputStyle}/></div>
-          <div><label style={labelStyle}>Total encaissé (€)</label><input type="number" min="0" value={f.montant_total_encaisse} onChange={e=>upd("montant_total_encaisse",e.target.value)} placeholder={prix.toString()} style={inputStyle}/></div>
+        <div><label style={labelStyle}>Acompte / montant reçu (€)</label>
+          <input type="number" min="0" value={f.acompte_recu} onChange={e=>upd("acompte_recu",e.target.value)} placeholder="0" style={inputStyle}/>
         </div>
-        {/* Quick buttons */}
         <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
           <button onClick={()=>upd("acompte_recu","50")} style={{background:c.s3,border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",color:c.tx}}>50€</button>
           <button onClick={()=>upd("acompte_recu","100")} style={{background:c.s3,border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",color:c.tx}}>100€</button>
-          <button onClick={()=>upd("acompte_recu",String(Math.round(prix/2)))} style={{background:c.s3,border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",color:c.tx}}>50%</button>
-          <button onClick={()=>{upd("acompte_recu",String(prix));}} style={{background:`${c.gn}20`,border:`0.5px solid ${c.gn}40`,borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",color:c.gn,fontWeight:600}}>Soldé ✓</button>
+          <button onClick={()=>upd("acompte_recu",String(Math.round(prix/2)))} style={{background:c.s3,border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",color:c.tx}}>50% ({Math.round(prix/2)}€)</button>
+          <button onClick={()=>upd("acompte_recu",String(prix))} style={{background:`${c.gn}20`,border:`0.5px solid ${c.gn}40`,borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",color:c.gn,fontWeight:600}}>Soldé ✓</button>
         </div>
       </div>}
 
