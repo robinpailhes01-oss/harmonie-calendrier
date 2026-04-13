@@ -111,7 +111,23 @@ export default function App(){
     return{encaisse,restant,totalReserve,potentiel,nReserves:reserves.length};
   },[allLeads,datedLeads]);
 
-  const saveLead=async(updates)=>{if(!edit?.id)return;setSaving(true);try{const cl={};for(const k in updates){if(updates[k]!==edit[k])cl[k]=updates[k]===""?null:updates[k];}if(Object.keys(cl).length>0)await fetch(`${SB}/rest/v1/leads?id=eq.${edit.id}`,{method:"PATCH",headers:{apikey:SK,Authorization:`Bearer ${SK}`,"Content-Type":"application/json","Prefer":"return=minimal"},body:JSON.stringify(cl)});await load();setEdit(null);}catch(e){alert("Erreur sauvegarde");}setSaving(false);};
+  const saveLead=async(updates)=>{
+    if(!edit?.id)return;setSaving(true);
+    try{
+      const cl={};
+      // Champs financiers : toujours envoyés (types mixtes string/number sinon ignorés)
+      const financialKeys=["acompte_recu","montant_total_encaisse","prix_custom"];
+      for(const k in updates){
+        const isDiff=String(updates[k])!==String(edit[k]??'');
+        const isFinancial=financialKeys.includes(k);
+        if(isDiff||isFinancial){cl[k]=updates[k]===""?null:updates[k];}
+      }
+      if(Object.keys(cl).length>0)
+        await fetch(`${SB}/rest/v1/leads?id=eq.${edit.id}`,{method:"PATCH",headers:{apikey:SK,Authorization:`Bearer ${SK}`,"Content-Type":"application/json","Prefer":"return=minimal"},body:JSON.stringify(cl)});
+      await load();setEdit(null);
+    }catch(e){alert("Erreur sauvegarde");}
+    setSaving(false);
+  };
   const createLead=async(data)=>{setSaving(true);try{const cl={...data};cl.instagram_username=cl.instagram_username||("manuel_"+Date.now());cl.source=cl.source||"manuel";cl.statut=cl.statut||"nouveau";cl.temperature=cl.temperature||"tiede";cl.score=cl.score||50;cl.nombre_messages=0;const r=await fetch(`${SB}/rest/v1/leads`,{method:"POST",headers:{apikey:SK,Authorization:`Bearer ${SK}`,"Content-Type":"application/json","Prefer":"return=minimal"},body:JSON.stringify(cl)});if(!r.ok)throw new Error(await r.text());await load();setCreating(false);}catch(e){alert("Erreur: "+e.message);}setSaving(false);};
   const deleteLead=async(id)=>{if(!confirm("Supprimer ce prospect ?"))return;setSaving(true);try{await fetch(`${SB}/rest/v1/leads?id=eq.${id}`,{method:"DELETE",headers:{apikey:SK,Authorization:`Bearer ${SK}`}});await load();setEdit(null);}catch(e){}setSaving(false);};
 
