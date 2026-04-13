@@ -4,7 +4,7 @@ const SB="https://utyfpmjhtfoxsxncfoxe.supabase.co",SK="eyJhbGciOiJIUzI1NiIsInR5
 const LAT=43.5283,LON=3.9816;
 const MN=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 const MNC=["Jan","Fév","Mar","Avr","Mai","Jui","Jul","Aoû","Sep","Oct","Nov","Déc"];
-const DL=["L","M","M","J","V","S","D"],DFLS=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"],DFL=["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"];
+const DL=["L","M","M","J","V","S","D"],DFLS=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
 const TX={nuit_classique:150,nuit_prestige:350,sortie_mer_2h:380,sortie_mer_3h:550,sortie_mer_4h:750};
 const FM={nuit_classique:{c:"#007AFF",l:"Classique",i:"🌙"},nuit_prestige:{c:"#AF52DE",l:"Prestige",i:"✨"},sortie_mer_2h:{c:"#30D158",l:"Sortie 2h",i:"⛵"},sortie_mer_3h:{c:"#34C759",l:"Sortie 3h",i:"⛵"},sortie_mer_4h:{c:"#28BD4F",l:"Sortie 4h",i:"⛵"}};
 const TYPES=[{v:"nuit_classique",l:"Nuit Classique 150€"},{v:"nuit_prestige",l:"Nuit Prestige 350€"},{v:"sortie_mer_2h",l:"Sortie 2h 380€"},{v:"sortie_mer_3h",l:"Sortie 3h 550€"},{v:"sortie_mer_4h",l:"Sortie 4h 750€"}];
@@ -12,6 +12,17 @@ const STATUTS=[{v:"nouveau",l:"Nouveau"},{v:"en_conversation",l:"En conversation
 const TEMPS=[{v:"chaud",l:"Chaud"},{v:"tiede",l:"Tiède"},{v:"froid",l:"Froid"}];
 const DT={nuit_classique:[17,12],nuit_prestige:[17,12],sortie_mer_2h:[10,12],sortie_mer_3h:[10,13],sortie_mer_4h:[10,14]};
 const HOURS=Array.from({length:16},(_,i)=>i+7);
+
+// Sort leads: réservé first, then chaud, then tiède, then froid
+function sortLeads(leads){
+  const order={reserve:0,chaud:1,tiede:2,froid:3};
+  return [...leads].sort((a,b)=>{
+    const ao=a.statut==="reserve"?0:order[a.temperature]||3;
+    const bo=b.statut==="reserve"?0:order[b.temperature]||3;
+    if(ao!==bo)return ao-bo;
+    return (b.score||0)-(a.score||0);
+  });
+}
 
 function pda(ds,ref){
   if(!ds)return null;
@@ -30,6 +41,7 @@ function pda(ds,ref){
 function getWeekStart(date){const d=new Date(date);const day=d.getDay();const diff=d.getDate()-(day===0?6:day-1);return new Date(d.getFullYear(),d.getMonth(),diff);}
 function sameDay(a,b){return a&&b&&a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();}
 function useWin(){const[w,s]=useState(typeof window!=="undefined"?window.innerWidth:1200);useEffect(()=>{const h=()=>s(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);return w;}
+function fmt(n){return n>=1000?`${(n/1000).toFixed(1)}k€`:`${n}€`;}
 
 export default function App(){
   const[dk,setDk]=useState(true);
@@ -60,11 +72,10 @@ export default function App(){
   const load=useCallback(async()=>{
     try{
       const d=await sb("leads?select=*&statut=not.eq.perdu&statut=not.eq.termine");
-      const f=d.filter(l=>!["robinpailhes","robinai_consulting"].includes(l.instagram_username)).sort((a,b)=>(b.score||0)-(a.score||0));
-      setAllLeads(f);
-      // Deduplicate by instagram_username — one entry per person
+      const f=d.filter(l=>!["robinpailhes","robinai_consulting"].includes(l.instagram_username));
+      setAllLeads(sortLeads(f));
       const seen=new Set();const deduped=[];
-      for(const l of f){if(!seen.has(l.instagram_username)){seen.add(l.instagram_username);const pd=pda(l.date_souhaitee,now);deduped.push({...l,pd});}}
+      for(const l of sortLeads(f)){if(!seen.has(l.instagram_username)){seen.add(l.instagram_username);const pd=pda(l.date_souhaitee,now);deduped.push({...l,pd});}}
       setDatedLeads(deduped.filter(l=>l.pd));
     }catch(e){}
     try{
@@ -83,11 +94,26 @@ export default function App(){
   },[yr,mo,now,sb]);
   useEffect(()=>{load();},[load]);
 
+  // Financial calculations
+  const finCalc=useMemo(()=>{
+    const reserves=allLeads.filter(l=>l.statut==="reserve");
+    const chauds=allLeads.filter(l=>l.temperature==="chaud"&&l.statut!=="reserve");
+    const autres=allLeads.filter(l=>l.temperature!=="chaud"&&l.statut!=="reserve");
+    // Encaissé = acomptes reçus sur réservations
+    const encaisse=reserves.reduce((s,l)=>s+parseFloat(l.acompte_recu||0),0);
+    // Restant = montant total réservations - acomptes déjà reçus
+    const totalReserve=reserves.reduce((s,l)=>s+(TX[l.type_interet]||0),0);
+    const restant=totalReserve-encaisse;
+    // Pipeline potentiel = chauds + tièdes datés
+    const potentiel=datedLeads.filter(l=>l.statut!=="reserve").reduce((s,l)=>s+(TX[l.type_interet]||0),0);
+    return{encaisse,restant,totalReserve,potentiel,nReserves:reserves.length};
+  },[allLeads,datedLeads]);
+
   const saveLead=async(updates)=>{if(!edit?.id)return;setSaving(true);try{const cl={};for(const k in updates){if(updates[k]!==edit[k])cl[k]=updates[k]===""?null:updates[k];}if(Object.keys(cl).length>0)await fetch(`${SB}/rest/v1/leads?id=eq.${edit.id}`,{method:"PATCH",headers:{apikey:SK,Authorization:`Bearer ${SK}`,"Content-Type":"application/json","Prefer":"return=minimal"},body:JSON.stringify(cl)});await load();setEdit(null);}catch(e){alert("Erreur sauvegarde");}setSaving(false);};
   const createLead=async(data)=>{setSaving(true);try{const cl={...data};cl.instagram_username=cl.instagram_username||("manuel_"+Date.now());cl.source=cl.source||"manuel";cl.statut=cl.statut||"nouveau";cl.temperature=cl.temperature||"tiede";cl.score=cl.score||50;cl.nombre_messages=0;const r=await fetch(`${SB}/rest/v1/leads`,{method:"POST",headers:{apikey:SK,Authorization:`Bearer ${SK}`,"Content-Type":"application/json","Prefer":"return=minimal"},body:JSON.stringify(cl)});if(!r.ok)throw new Error(await r.text());await load();setCreating(false);}catch(e){alert("Erreur: "+e.message);}setSaving(false);};
   const deleteLead=async(id)=>{if(!confirm("Supprimer ce prospect ?"))return;setSaving(true);try{await fetch(`${SB}/rest/v1/leads?id=eq.${id}`,{method:"DELETE",headers:{apikey:SK,Authorization:`Bearer ${SK}`}});await load();setEdit(null);}catch(e){}setSaving(false);};
 
-  const lfd=d=>datedLeads.filter(l=>l.pd&&l.pd.getFullYear()===yr&&l.pd.getMonth()===mo&&l.pd.getDate()===d);
+  const lfd=d=>sortLeads(datedLeads.filter(l=>l.pd&&l.pd.getFullYear()===yr&&l.pd.getMonth()===mo&&l.pd.getDate()===d));
   const wfd=d=>wx[`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`]||null;
   const wxForDate=d=>wx[`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`]||null;
   const isToday=d=>d instanceof Date?sameDay(d,now):(d===now.getDate()&&mo===now.getMonth()&&yr===now.getFullYear());
@@ -95,13 +121,17 @@ export default function App(){
   const isG=w=>w&&w.code<3&&w.hi>=20&&w.wind<30&&(!w.wave||parseFloat(w.wave)<1);
   const lc=l=>l.statut==="reserve"?c.gn:l.temperature==="chaud"?c.red:l.temperature==="tiede"?c.or:c.tx3;
 
-  const mP=useMemo(()=>datedLeads.filter(l=>l.pd&&l.pd.getMonth()===mo&&l.pd.getFullYear()===yr),[datedLeads,mo,yr]);
   const up=useMemo(()=>datedLeads.filter(l=>l.pd&&l.pd>=new Date(now.getFullYear(),now.getMonth(),now.getDate())).sort((a,b)=>a.pd-b.pd),[datedLeads,now]);
-  const pipe=useMemo(()=>datedLeads.reduce((s,l)=>s+(TX[l.type_interet]||0),0),[datedLeads]);
   const profit=fin.rev-fin.dep;
-  const filtered=useMemo(()=>{if(tab==="all")return allLeads;if(tab==="chaud")return allLeads.filter(l=>l.temperature==="chaud");if(tab==="tiede")return allLeads.filter(l=>l.temperature==="tiede");return allLeads.filter(l=>l.temperature==="froid");},[allLeads,tab]);
+  const filtered=useMemo(()=>{
+    let base=allLeads;
+    if(tab==="chaud")base=allLeads.filter(l=>l.temperature==="chaud");
+    else if(tab==="tiede")base=allLeads.filter(l=>l.temperature==="tiede");
+    else if(tab==="froid")base=allLeads.filter(l=>l.temperature==="froid");
+    return sortLeads(base);
+  },[allLeads,tab]);
   const weekDays=useMemo(()=>{const days=[];for(let i=0;i<7;i++){const d=new Date(weekStart);d.setDate(weekStart.getDate()+i);days.push(d);}return days;},[weekStart]);
-  const leadsForDate=d=>datedLeads.filter(l=>l.pd&&sameDay(l.pd,d));
+  const leadsForDate=d=>sortLeads(datedLeads.filter(l=>l.pd&&sameDay(l.pd,d)));
 
   const goBack=()=>{if(view==="month")setCur(new Date(yr,mo-1,1));else if(view==="week"){const d=new Date(weekStart);d.setDate(d.getDate()-7);setWeekStart(new Date(d));}else{const d=new Date(dayView);d.setDate(d.getDate()-1);setDayView(new Date(d));}setSel(null);};
   const goFwd=()=>{if(view==="month")setCur(new Date(yr,mo+1,1));else if(view==="week"){const d=new Date(weekStart);d.setDate(d.getDate()+7);setWeekStart(new Date(d));}else{const d=new Date(dayView);d.setDate(d.getDate()+1);setDayView(new Date(d));}setSel(null);};
@@ -113,42 +143,49 @@ export default function App(){
   const inputStyle={width:"100%",padding:"10px 12px",borderRadius:10,border:`0.5px solid ${c.bd}`,background:c.s2,color:c.tx,fontSize:14,marginTop:4};
   const labelStyle={fontSize:11,fontWeight:600,color:c.tx2,letterSpacing:"0.02em",textTransform:"uppercase"};
 
+  // ---- EVENT BAR (used on both mobile and desktop) ----
+  const EventBar=({l,compact})=>{
+    const lcol=lc(l);const fm=FM[l.type_interet]||{i:"👤"};
+    return(
+      <div onClick={e=>{e.stopPropagation();setEdit(l);}}
+        style={{fontSize:compact?9:9,fontWeight:600,padding:compact?"1px 3px 1px 5px":"1px 4px 1px 6px",borderRadius:3,marginBottom:1,background:`${lcol}22`,color:lcol,cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",borderLeft:`2px solid ${lcol}`,lineHeight:"14px"}}>
+        {fm.i} {l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}
+        {l.statut==="reserve"&&" ✓"}
+      </div>
+    );
+  };
+
   // ---- MONTH VIEW ----
   const MonthView=()=>(
-    <div style={{padding:mob?"0 10px 16px":"0 28px 24px"}}>
+    <div style={{padding:mob?"0 8px 16px":"0 28px 24px"}}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",marginBottom:4}}>
         {(mob?DL:DFLS).map((d,i)=><div key={i} style={{textAlign:"center",fontSize:11,fontWeight:500,color:c.tx3,padding:"4px 0",letterSpacing:"0.03em"}}>{d}</div>)}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
-        {Array.from({length:fd}).map((_,i)=><div key={`e${i}`} style={{minHeight:mob?52:96}}/>)}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:mob?1:2}}>
+        {Array.from({length:fd}).map((_,i)=><div key={`e${i}`} style={{minHeight:mob?60:96}}/>)}
         {Array.from({length:dim}).map((_,i)=>{
           const day=i+1,dl=lfd(day),w=wfd(day),td=isToday(day),s=sel===day;
+          const maxBars=mob?2:3;
           return(
-            <div key={day} onClick={()=>setSel(s?null:day)} style={{minHeight:mob?52:96,padding:mob?"2px":"4px",cursor:"pointer",background:s?c.sel:"transparent",borderRadius:8,border:`0.5px solid ${s?c.ac+"50":c.bd+"25"}`,overflow:"hidden",transition:"background 0.1s"}}>
+            <div key={day} onClick={()=>setSel(s?null:day)}
+              style={{minHeight:mob?60:96,padding:mob?"2px 2px":"4px 4px",cursor:"pointer",background:s?c.sel:"transparent",borderRadius:8,border:`0.5px solid ${s?c.ac+"50":c.bd+"25"}`,overflow:"hidden",transition:"background 0.1s"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"2px 3px 2px"}}>
-                <div style={{width:mob?22:26,height:mob?22:26,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:mob?11:13,fontWeight:td?700:400,background:td?c.ac:"transparent",color:td?"#fff":s?c.ac:c.tx,flexShrink:0}}>{day}</div>
+                <div style={{width:mob?20:26,height:mob?20:26,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:mob?10:13,fontWeight:td?700:400,background:td?c.ac:"transparent",color:td?"#fff":s?c.ac:c.tx,flexShrink:0}}>{day}</div>
                 {!mob&&w&&<span style={{fontSize:9,color:c.tx3,marginTop:3}}>{wi(w.code)}{w.hi}°</span>}
               </div>
-              {!mob&&dl.slice(0,3).map((l,idx)=>(
-                <div key={idx} onClick={e=>{e.stopPropagation();setEdit(l);}} style={{fontSize:9,fontWeight:600,padding:"1px 4px 1px 6px",borderRadius:3,marginBottom:1,background:`${lc(l)}20`,color:lc(l),cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",borderLeft:`2px solid ${lc(l)}`}}>
-                  {(FM[l.type_interet]||{i:"👤"}).i} {l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}
-                </div>
-              ))}
-              {!mob&&dl.length>3&&<div style={{fontSize:8,color:c.tx3,padding:"0 4px"}}>+{dl.length-3}</div>}
-              {mob&&dl.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:2,padding:"1px 3px"}}>
-                {dl.slice(0,4).map((l,idx)=><div key={idx} style={{width:5,height:5,borderRadius:"50%",background:lc(l)}}/>)}
-              </div>}
+              {/* Bars on ALL screen sizes */}
+              {dl.slice(0,maxBars).map((l,idx)=><EventBar key={idx} l={l} compact={mob}/>)}
+              {dl.length>maxBars&&<div style={{fontSize:mob?7:8,color:c.tx3,padding:"0 3px"}}>+{dl.length-maxBars}</div>}
             </div>
           );
         })}
       </div>
       {sel&&(
-        <div className="au" style={{marginTop:14,background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:14,padding:mob?14:18}}>
+        <div className="au" style={{marginTop:12,background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:14,padding:mob?14:18}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
             <div>
               <div style={{fontSize:20,fontWeight:700,letterSpacing:"-0.04em"}}>{sel} {MN[mo]}</div>
-              {wfd(sel)&&<div style={{fontSize:11,color:c.tx2,marginTop:2}}>{wi(wfd(sel).code)} {wfd(sel).hi}°/{wfd(sel).lo}° · 💨{wfd(sel).wind}km/h{wfd(sel).wave?` · 🌊${wfd(sel).wave}m`:""}
-                {isG(wfd(sel))&&<span style={{color:c.gn,marginLeft:6}}>✓ Idéal</span>}</div>}
+              {wfd(sel)&&<div style={{fontSize:11,color:c.tx2,marginTop:2}}>{wi(wfd(sel).code)} {wfd(sel).hi}°/{wfd(sel).lo}° · 💨{wfd(sel).wind}km/h{wfd(sel).wave?` · 🌊${wfd(sel).wave}m`:""}{isG(wfd(sel))&&<span style={{color:c.gn,marginLeft:6}}>✓ Idéal</span>}</div>}
             </div>
             <div style={{display:"flex",gap:8}}>
               <button onClick={()=>openDay(new Date(yr,mo,sel))} style={{background:c.ac,color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Vue jour →</button>
@@ -169,7 +206,7 @@ export default function App(){
   const WeekView=()=>(
     <div style={{padding:mob?"0 8px 16px":"0 28px 24px",overflowX:"auto"}}>
       <div style={{minWidth:mob?580:0}}>
-        <div style={{display:"grid",gridTemplateColumns:`50px repeat(7,1fr)`,marginBottom:0,borderBottom:`0.5px solid ${c.bd}30`}}>
+        <div style={{display:"grid",gridTemplateColumns:`50px repeat(7,1fr)`,borderBottom:`0.5px solid ${c.bd}30`}}>
           <div/>
           {weekDays.map((d,i)=>{
             const td=isToday(d);const dl=leadsForDate(d);const w=wxForDate(d);
@@ -178,7 +215,7 @@ export default function App(){
                 <div style={{fontSize:10,color:c.tx3,fontWeight:500,letterSpacing:"0.04em",textTransform:"uppercase"}}>{DFLS[i]}</div>
                 <div style={{width:30,height:30,borderRadius:"50%",background:td?c.ac:"transparent",color:td?"#fff":c.tx,fontSize:15,fontWeight:700,margin:"4px auto 2px",display:"flex",alignItems:"center",justifyContent:"center"}}>{d.getDate()}</div>
                 {w&&<div style={{fontSize:9,color:c.tx3}}>{wi(w.code)}{w.hi}°</div>}
-                {dl.length>0&&<div style={{fontSize:9,color:c.tx3}}>{dl.length} rdv</div>}
+                {dl.length>0&&<div style={{fontSize:9,color:dl.some(l=>l.statut==="reserve")?c.gn:c.tx3}}>{dl.length} rdv</div>}
               </div>
             );
           })}
@@ -198,9 +235,9 @@ export default function App(){
                       return(
                         <div key={li} onClick={e=>{e.stopPropagation();setEdit(l);}}
                           style={{background:`${lcol}18`,border:`0.5px solid ${lcol}50`,borderLeft:`2.5px solid ${lcol}`,borderRadius:5,padding:"3px 5px",cursor:"pointer",marginBottom:2,minHeight:44,overflow:"hidden"}}>
-                          <div style={{fontSize:10,fontWeight:700,color:lcol,lineHeight:"14px"}}>{l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}</div>
+                          <div style={{fontSize:10,fontWeight:700,color:lcol,lineHeight:"14px"}}>{l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}{l.statut==="reserve"?" ✓":""}</div>
                           <div style={{fontSize:9,color:lcol,opacity:0.75}}>{fm.i} {dt[0]}h→{dt[1]}h</div>
-                          {l.occasion&&<div style={{fontSize:8,color:c.tx3,marginTop:1}}>{l.occasion}</div>}
+                          {l.acompte_recu>0&&<div style={{fontSize:8,color:c.gn}}>+{l.acompte_recu}€</div>}
                         </div>
                       );
                     })}
@@ -225,13 +262,12 @@ export default function App(){
             <div><div style={{fontSize:22,fontWeight:700,letterSpacing:"-0.05em"}}>{w.hi}°<span style={{fontSize:14,fontWeight:400,color:c.tx2}}>/{w.lo}°</span></div>
             <div style={{fontSize:11,color:c.tx2}}>💨 {w.wind}km/h{w.wave?` · 🌊${w.wave}m`:""}</div></div>
           </div>
-          {isG(w)&&<div style={{background:`${c.gn}15`,border:`0.5px solid ${c.gn}40`,borderRadius:8,padding:"6px 12px",color:c.gn,fontSize:12,fontWeight:600}}>✓ Conditions idéales</div>}
+          {isG(w)&&<div style={{background:`${c.gn}15`,border:`0.5px solid ${c.gn}40`,borderRadius:8,padding:"6px 12px",color:c.gn,fontSize:12,fontWeight:600}}>✓ Idéal</div>}
         </div>}
         <div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:12,overflow:"hidden"}}>
           {dl.length===0&&<div style={{textAlign:"center",padding:"48px 20px",color:c.tx3}}>
             <div style={{fontSize:28,marginBottom:8}}>📅</div>
             <div style={{fontSize:14,fontWeight:600,color:c.tx2}}>Journée libre</div>
-            <div style={{fontSize:12,marginTop:4,color:c.tx3}}>{isG(w)?"Conditions parfaites pour une sortie":""}</div>
           </div>}
           {HOURS.map((h,hi)=>{
             const hLeads=dl.filter(l=>{const dt=DT[l.type_interet];return dt&&dt[0]===h;});
@@ -250,23 +286,28 @@ export default function App(){
                 <div style={{flex:1,borderLeft:`0.5px solid ${isNow?c.ac+"40":c.bd+"15"}`,padding:"6px 10px",display:"flex",flexDirection:"column",gap:6}}>
                   {hLeads.map((l,li)=>{
                     const lcol=lc(l);const fm=FM[l.type_interet]||{c:c.tx3,l:"—",i:"👤"};const dt=DT[l.type_interet]||[h,h+2];
+                    const prix=TX[l.type_interet]||0;const acompte=parseFloat(l.acompte_recu||0);const restant=prix-acompte;
                     return(
                       <div key={li} onClick={()=>setEdit(l)} style={{background:`${lcol}10`,border:`0.5px solid ${lcol}40`,borderLeft:`3px solid ${lcol}`,borderRadius:10,padding:"10px 14px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                        <div>
-                          <div style={{fontSize:16,fontWeight:700,letterSpacing:"-0.03em",color:lcol}}>{l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8}}>
+                            <div style={{fontSize:16,fontWeight:700,letterSpacing:"-0.03em",color:lcol}}>{l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}</div>
+                            {l.statut==="reserve"&&<span style={{fontSize:10,fontWeight:600,padding:"2px 7px",borderRadius:10,background:`${c.gn}20`,color:c.gn}}>✓ Réservé</span>}
+                          </div>
                           <div style={{fontSize:12,color:c.tx2,marginTop:2}}>{fm.i} {fm.l}{l.occasion?` · ${l.occasion}`:""}</div>
                           {l.telephone&&<div style={{fontSize:11,color:c.gn,marginTop:3}}>📱 {l.telephone}</div>}
-                          {l.email&&<div style={{fontSize:11,color:c.tx3,marginTop:1}}>✉ {l.email}</div>}
-                          {l.notes&&<div style={{fontSize:11,color:c.tx3,marginTop:5,fontStyle:"italic",maxWidth:300}}>{l.notes.substring(0,80)}</div>}
+                          {l.notes&&<div style={{fontSize:11,color:c.tx3,marginTop:5,fontStyle:"italic"}}>{l.notes.substring(0,80)}</div>}
+                          {/* Financial breakdown */}
+                          {prix>0&&<div style={{marginTop:8,display:"flex",gap:8,flexWrap:"wrap"}}>
+                            <div style={{background:`${c.gn}15`,borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:600,color:c.gn}}>💰 Total: {prix}€</div>
+                            {acompte>0&&<div style={{background:`${c.ac}15`,borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:600,color:c.ac}}>✓ Reçu: {acompte}€</div>}
+                            {acompte>0&&restant>0&&<div style={{background:`${c.or}15`,borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:600,color:c.or}}>⏳ Reste: {restant}€</div>}
+                            {acompte===0&&<div style={{background:`${c.or}15`,borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:600,color:c.or}}>⏳ À encaisser: {prix}€</div>}
+                          </div>}
                         </div>
                         <div style={{textAlign:"right",flexShrink:0,marginLeft:12}}>
                           <div style={{fontSize:14,fontWeight:700,color:lcol}}>{dt[0]}h → {dt[1]}h</div>
-                          {l.nombre_personnes&&<div style={{fontSize:11,color:c.tx2,marginTop:2}}>👥 {l.nombre_personnes} pers.</div>}
-                          <div style={{marginTop:6,display:"flex",justifyContent:"flex-end"}}>
-                            <span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:12,background:`${lcol}18`,color:lcol}}>{l.statut==="reserve"?"Réservé":l.temperature==="chaud"?"Chaud":l.temperature==="tiede"?"Tiède":"Froid"}</span>
-                          </div>
-                          {l.score&&<div style={{fontSize:10,color:c.tx3,marginTop:4}}>Score {l.score}</div>}
-                          <div style={{fontSize:11,color:c.tx2,marginTop:2}}>{TX[l.type_interet]?TX[l.type_interet]+"€":""}</div>
+                          {l.nombre_personnes&&<div style={{fontSize:11,color:c.tx2,marginTop:2}}>👥 {l.nombre_personnes}</div>}
                         </div>
                       </div>
                     );
@@ -314,37 +355,62 @@ export default function App(){
               <span style={{display:"flex",alignItems:"center",gap:3,marginLeft:6}}><span style={{width:6,height:6,borderRadius:"50%",background:c.or}}/>Tiède</span>
               <span style={{display:"flex",alignItems:"center",gap:3,marginLeft:6}}><span style={{width:6,height:6,borderRadius:"50%",background:c.gn}}/>Réservé</span>
             </div>}
-            <button onClick={()=>setCreating(true)} style={{background:c.ac,border:"none",borderRadius:10,padding:mob?"6px 10px":"6px 14px",cursor:"pointer",fontSize:13,color:"#fff",fontWeight:600}}>+ {mob?"":"Nouveau lead"}</button>
+            <button onClick={()=>setCreating(true)} style={{background:c.ac,border:"none",borderRadius:10,padding:mob?"6px 10px":"6px 14px",cursor:"pointer",fontSize:13,color:"#fff",fontWeight:600}}>+ {mob?"":"Lead"}</button>
             <button onClick={()=>setDk(!dk)} style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:10,padding:"6px 10px",cursor:"pointer",fontSize:14}}>{dk?"☀️":"🌙"}</button>
           </div>
         </div>
-        <div style={{display:"flex",borderTop:`0.5px solid ${c.bd}`,overflow:"auto"}}>
-          {[{l:"Revenus",v:`${fin.rev}€`,s:`${fin.nR} op.`,cl:c.gn},{l:"Dépenses",v:`${fin.dep}€`,s:`${fin.nD} op.`,cl:c.red},
-            {l:"Résultat",v:`${profit>=0?"+":""}${profit}€`,s:profit>=0?"Positif":"Déficit",cl:profit>=0?c.gn:c.red},
-            {l:"Pipeline",v:`${pipe}€`,s:`${up.length} datés`,cl:c.ac},
-            {l:"Leads",v:`${allLeads.length}`,s:`${allLeads.filter(l=>l.temperature==="chaud").length} chauds`,cl:c.or}
-          ].map((k,i)=>(
-            <div key={i} style={{flex:1,padding:mob?"8px 10px":"10px 16px",borderRight:i<4?`0.5px solid ${c.bd}`:"none",minWidth:mob?70:0}}>
-              <div style={{fontSize:mob?9:10,color:c.tx3,fontWeight:500,marginBottom:2}}>{k.l}</div>
-              <div style={{fontSize:mob?14:18,fontWeight:700,letterSpacing:"-0.04em",color:k.cl}}>{k.v}</div>
-              <div style={{fontSize:mob?9:10,color:c.tx3,marginTop:1}}>{k.s}</div>
+
+        {/* KPI STRIP — 3 rows on mobile, scrollable */}
+        <div style={{borderTop:`0.5px solid ${c.bd}`,overflowX:"auto"}}>
+          {/* Row 1: P&L */}
+          <div style={{display:"flex"}}>
+            {[
+              {l:"Revenus",v:`${fmt(fin.rev)}`,s:`${fin.nR} op.`,cl:c.gn},
+              {l:"Dépenses",v:`${fmt(fin.dep)}`,s:`${fin.nD} op.`,cl:c.red},
+              {l:"Résultat",v:`${profit>=0?"+":""}${fmt(profit)}`,s:profit>=0?"Positif":"Déficit",cl:profit>=0?c.gn:c.red},
+            ].map((k,i)=>(
+              <div key={i} style={{flex:1,padding:mob?"7px 10px":"9px 16px",borderRight:`0.5px solid ${c.bd}`,minWidth:mob?80:0}}>
+                <div style={{fontSize:mob?8:9,color:c.tx3,fontWeight:500}}>{k.l}</div>
+                <div style={{fontSize:mob?13:17,fontWeight:700,letterSpacing:"-0.04em",color:k.cl}}>{k.v}</div>
+                <div style={{fontSize:mob?8:9,color:c.tx3}}>{k.s}</div>
+              </div>
+            ))}
+            <div style={{flex:1,padding:mob?"7px 10px":"9px 16px",minWidth:mob?80:0}}>
+              <div style={{fontSize:mob?8:9,color:c.tx3,fontWeight:500}}>Leads</div>
+              <div style={{fontSize:mob?13:17,fontWeight:700,letterSpacing:"-0.04em",color:c.or}}>{allLeads.length}</div>
+              <div style={{fontSize:mob?8:9,color:c.tx3}}>{allLeads.filter(l=>l.temperature==="chaud").length} chauds</div>
             </div>
-          ))}
+          </div>
+          {/* Row 2: Financier réservations */}
+          <div style={{display:"flex",borderTop:`0.5px solid ${c.bd}30`}}>
+            {[
+              {l:"Encaissé",v:`${fmt(finCalc.encaisse)}`,s:`${finCalc.nReserves} rés.`,cl:c.gn,icon:"✓"},
+              {l:"Restant",v:`${fmt(finCalc.restant)}`,s:"à encaisser",cl:c.or,icon:"⏳"},
+              {l:"Pipeline",v:`${fmt(finCalc.potentiel)}`,s:`${up.length} datés`,cl:c.ac,icon:"🔥"},
+              {l:"Total résas",v:`${fmt(finCalc.totalReserve)}`,s:"confirmé",cl:c.pu,icon:"⛵"},
+            ].map((k,i)=>(
+              <div key={i} style={{flex:1,padding:mob?"6px 10px":"8px 16px",borderRight:i<3?`0.5px solid ${c.bd}30`:"none",minWidth:mob?80:0}}>
+                <div style={{fontSize:mob?7:9,color:c.tx3,fontWeight:500}}>{k.icon} {k.l}</div>
+                <div style={{fontSize:mob?12:16,fontWeight:700,letterSpacing:"-0.03em",color:k.cl}}>{k.v}</div>
+                <div style={{fontSize:mob?7:9,color:c.tx3}}>{k.s}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </header>
 
       {/* NAV */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:mob?"10px 14px":"14px 28px"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:mob?"10px 12px":"14px 28px"}}>
         <div style={{display:"flex",alignItems:"center",gap:2}}>
           <button onClick={goBack} style={{background:"none",border:"none",color:c.ac,fontSize:22,cursor:"pointer",padding:"2px 8px",lineHeight:1}}>‹</button>
-          <div style={{fontSize:mob?17:21,fontWeight:700,minWidth:mob?150:220,textAlign:"center",letterSpacing:"-0.04em"}}>{navTitle()}</div>
+          <div style={{fontSize:mob?16:21,fontWeight:700,minWidth:mob?140:220,textAlign:"center",letterSpacing:"-0.04em"}}>{navTitle()}</div>
           <button onClick={goFwd} style={{background:"none",border:"none",color:c.ac,fontSize:22,cursor:"pointer",padding:"2px 8px",lineHeight:1}}>›</button>
         </div>
-        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+        <div style={{display:"flex",gap:5,alignItems:"center"}}>
           <button onClick={goToday} style={{background:"none",border:"none",color:c.ac,fontSize:13,cursor:"pointer",fontWeight:500}}>Auj.</button>
           <div style={{display:"flex",background:c.s2,borderRadius:10,padding:2,gap:1}}>
-            {[{k:"month",l:mob?"M":"Mois"},{k:"week",l:mob?"S":"Semaine"},{k:"day",l:mob?"J":"Jour"}].map(v=>(
-              <button key={v.k} onClick={()=>setView(v.k)} style={{padding:"5px 9px",border:"none",borderRadius:8,cursor:"pointer",fontSize:11,fontWeight:view===v.k?600:400,background:view===v.k?c.s:"transparent",color:view===v.k?c.tx:c.tx2,transition:"all 0.15s",boxShadow:view===v.k?(dk?"0 1px 3px rgba(0,0,0,.3)":"0 1px 3px rgba(0,0,0,.08)"):"none"}}>{v.l}</button>
+            {[{k:"month",l:mob?"M":"Mois"},{k:"week",l:mob?"S":"Sem."},{k:"day",l:mob?"J":"Jour"}].map(v=>(
+              <button key={v.k} onClick={()=>setView(v.k)} style={{padding:mob?"5px 7px":"5px 9px",border:"none",borderRadius:8,cursor:"pointer",fontSize:11,fontWeight:view===v.k?600:400,background:view===v.k?c.s:"transparent",color:view===v.k?c.tx:c.tx2,transition:"all 0.15s",boxShadow:view===v.k?(dk?"0 1px 3px rgba(0,0,0,.3)":"0 1px 3px rgba(0,0,0,.08)"):"none"}}>{v.l}</button>
             ))}
           </div>
         </div>
@@ -359,7 +425,7 @@ export default function App(){
         <div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:16,padding:mob?16:24}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
             <div style={{fontSize:mob?17:20,fontWeight:700,letterSpacing:"-0.04em"}}>Tous les prospects</div>
-            <span style={{fontSize:12,color:c.tx3}}>{allLeads.length} contacts</span>
+            <span style={{fontSize:12,color:c.tx3}}>{allLeads.length}</span>
           </div>
           <div style={{display:"flex",gap:0,marginBottom:16,marginTop:8,borderRadius:10,background:c.s2,padding:2}}>
             {[{k:"all",l:"Tous",n:allLeads.length},{k:"chaud",l:"Chauds",n:allLeads.filter(l=>l.temperature==="chaud").length,cl:c.red},
@@ -376,15 +442,15 @@ export default function App(){
               const fm=FM[l.type_interet]||{c:c.tx3,l:"—",i:"👤"};
               const ago=l.derniere_interaction?Math.round((now-new Date(l.derniere_interaction))/864e5):null;
               const lcol=lc(l);
+              const prix=TX[l.type_interet]||0;const acompte=parseFloat(l.acompte_recu||0);
               return(
-                <div key={i} onClick={()=>setEdit(l)} style={{background:c.s2,borderRadius:12,padding:mob?10:12,border:`0.5px solid ${c.bd}`,display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"transform 0.1s"}} onMouseEnter={e=>e.currentTarget.style.transform="scale(1.01)"} onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+                <div key={i} onClick={()=>setEdit(l)} style={{background:c.s2,borderRadius:12,padding:mob?10:12,border:`0.5px solid ${c.bd}`,display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"transform 0.1s"}} onMouseEnter={e=>e.currentTarget.style.transform="scale(1.005)"} onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
                   <div style={{width:34,height:34,borderRadius:10,background:`${fm.c}10`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>{fm.i}</div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span style={{fontWeight:600,fontSize:13,letterSpacing:"-0.02em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.prenom?.replace(/^\w/,x=>x.toUpperCase())||l.instagram_username}</span>
+                      <span style={{fontWeight:600,fontSize:13,letterSpacing:"-0.02em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.prenom?.replace(/^\w/,x=>x.toUpperCase())||l.instagram_username}{l.statut==="reserve"?" ✓":""}</span>
                       <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
-                        <div style={{width:36,height:3,borderRadius:2,background:`${c.tx3}20`,overflow:"hidden"}}><div style={{width:`${l.score}%`,height:"100%",borderRadius:2,background:c.ac}}/></div>
-                        <span style={{fontSize:10,fontWeight:600,color:c.tx2}}>{l.score}</span>
+                        {prix>0&&<span style={{fontSize:10,fontWeight:600,color:acompte>=prix?c.gn:acompte>0?c.or:c.tx3}}>{acompte>=prix?"Soldé":acompte>0?`${acompte}/${prix}€`:`${prix}€`}</span>}
                       </div>
                     </div>
                     <div style={{display:"flex",alignItems:"center",gap:4,marginTop:3,fontSize:10,color:c.tx3,flexWrap:"wrap"}}>
@@ -424,16 +490,17 @@ function Modal({children,onClose,mob,c,saving,title,subtitle}){
 function MiniCard({l,c,now,lc,setEdit,FM}){
   const fm=FM[l.type_interet]||{c:c.tx3,l:"—",i:"👤"};const lcol=lc(l);
   const ago=l.derniere_interaction?Math.round((now-new Date(l.derniere_interaction))/864e5):null;
+  const prix=TX[l.type_interet]||0;const acompte=parseFloat(l.acompte_recu||0);
   return(
-    <div onClick={e=>{e.stopPropagation();setEdit(l);}} style={{background:c.s2,borderRadius:10,padding:12,border:`0.5px solid ${c.bd}`,cursor:"pointer",borderLeft:`3px solid ${lcol}`}} onMouseEnter={e=>e.currentTarget.style.opacity="0.85"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+    <div onClick={e=>{e.stopPropagation();setEdit(l);}} style={{background:c.s2,borderRadius:10,padding:12,border:`0.5px solid ${c.bd}`,cursor:"pointer",borderLeft:`3px solid ${lcol}`}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div style={{fontWeight:600,fontSize:13,letterSpacing:"-0.02em"}}>{fm.i} {l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}</div>
+        <div style={{fontWeight:600,fontSize:13,letterSpacing:"-0.02em"}}>{fm.i} {l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}{l.statut==="reserve"?" ✓":""}</div>
         <span style={{fontSize:10,fontWeight:600,padding:"2px 7px",borderRadius:12,background:`${lcol}18`,color:lcol}}>{l.statut==="reserve"?"Réservé":l.temperature==="chaud"?"Chaud":l.temperature==="tiede"?"Tiède":"Froid"}</span>
       </div>
       <div style={{fontSize:11,color:c.tx2,marginTop:4}}>{fm.l}{l.occasion?` · ${l.occasion}`:""}</div>
       <div style={{display:"flex",gap:8,marginTop:6,fontSize:10,color:c.tx3,flexWrap:"wrap"}}>
         {l.telephone&&<span style={{color:c.gn}}>📱 {l.telephone}</span>}
-        {l.nombre_personnes&&<span>👥 {l.nombre_personnes}</span>}
+        {prix>0&&<span style={{color:acompte>=prix?c.gn:acompte>0?c.or:c.tx2,fontWeight:600}}>{acompte>=prix?"Soldé":acompte>0?`${acompte}€//${prix}€`:`${prix}€`}</span>}
         {ago!==null&&<span style={{marginLeft:"auto"}}>{ago===0?"Auj.":ago===1?"Hier":`${ago}j`}</span>}
       </div>
     </div>
@@ -441,8 +508,20 @@ function MiniCard({l,c,now,lc,setEdit,FM}){
 }
 
 function EditForm({lead,onSave,onDelete,saving,c,inputStyle,labelStyle}){
-  const[f,setF]=useState({prenom:lead.prenom||"",email:lead.email||"",telephone:lead.telephone||"",type_interet:lead.type_interet||"",date_souhaitee:lead.date_souhaitee||"",occasion:lead.occasion||"",nombre_personnes:lead.nombre_personnes||"",statut:lead.statut||"nouveau",temperature:lead.temperature||"froid",score:lead.score||0,notes:lead.notes||""});
+  const[f,setF]=useState({
+    prenom:lead.prenom||"",email:lead.email||"",telephone:lead.telephone||"",
+    type_interet:lead.type_interet||"",date_souhaitee:lead.date_souhaitee||"",
+    occasion:lead.occasion||"",nombre_personnes:lead.nombre_personnes||"",
+    statut:lead.statut||"nouveau",temperature:lead.temperature||"froid",
+    score:lead.score||0,notes:lead.notes||"",
+    acompte_recu:lead.acompte_recu||"",
+    montant_total_encaisse:lead.montant_total_encaisse||""
+  });
   const upd=(k,v)=>setF({...f,[k]:v});
+  const prix=TX[f.type_interet]||0;
+  const acompte=parseFloat(f.acompte_recu||0);
+  const restant=prix>0?prix-acompte:0;
+
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div><label style={labelStyle}>Prénom</label><input value={f.prenom} onChange={e=>upd("prenom",e.target.value)} style={inputStyle}/></div>
@@ -460,6 +539,37 @@ function EditForm({lead,onSave,onDelete,saving,c,inputStyle,labelStyle}){
         <div><label style={labelStyle}>Statut</label><select value={f.statut} onChange={e=>upd("statut",e.target.value)} style={inputStyle}>{STATUTS.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}</select></div>
         <div><label style={labelStyle}>Température</label><select value={f.temperature} onChange={e=>upd("temperature",e.target.value)} style={inputStyle}>{TEMPS.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}</select></div>
       </div>
+
+      {/* SECTION FINANCES */}
+      {prix>0&&<div style={{background:`${c.gn}08`,border:`0.5px solid ${c.gn}30`,borderRadius:10,padding:12}}>
+        <div style={{fontSize:11,fontWeight:600,color:c.tx2,letterSpacing:"0.02em",textTransform:"uppercase",marginBottom:10}}>💰 Finances</div>
+        <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+          <div style={{flex:1,background:c.s2,borderRadius:8,padding:"8px 10px",minWidth:80}}>
+            <div style={{fontSize:9,color:c.tx3}}>Prix total</div>
+            <div style={{fontSize:16,fontWeight:700,color:c.tx}}>{prix}€</div>
+          </div>
+          <div style={{flex:1,background:c.s2,borderRadius:8,padding:"8px 10px",minWidth:80}}>
+            <div style={{fontSize:9,color:c.tx3}}>Reçu</div>
+            <div style={{fontSize:16,fontWeight:700,color:acompte>=prix?c.gn:acompte>0?c.or:c.tx3}}>{acompte}€</div>
+          </div>
+          <div style={{flex:1,background:c.s2,borderRadius:8,padding:"8px 10px",minWidth:80}}>
+            <div style={{fontSize:9,color:c.tx3}}>Restant</div>
+            <div style={{fontSize:16,fontWeight:700,color:restant>0?c.or:c.gn}}>{restant}€</div>
+          </div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <div><label style={labelStyle}>Acompte reçu (€)</label><input type="number" min="0" max={prix} value={f.acompte_recu} onChange={e=>upd("acompte_recu",e.target.value)} placeholder="0" style={inputStyle}/></div>
+          <div><label style={labelStyle}>Total encaissé (€)</label><input type="number" min="0" value={f.montant_total_encaisse} onChange={e=>upd("montant_total_encaisse",e.target.value)} placeholder={prix.toString()} style={inputStyle}/></div>
+        </div>
+        {/* Quick buttons */}
+        <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
+          <button onClick={()=>upd("acompte_recu","50")} style={{background:c.s3,border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",color:c.tx}}>50€</button>
+          <button onClick={()=>upd("acompte_recu","100")} style={{background:c.s3,border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",color:c.tx}}>100€</button>
+          <button onClick={()=>upd("acompte_recu",String(Math.round(prix/2)))} style={{background:c.s3,border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",color:c.tx}}>50%</button>
+          <button onClick={()=>{upd("acompte_recu",String(prix));}} style={{background:`${c.gn}20`,border:`0.5px solid ${c.gn}40`,borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",color:c.gn,fontWeight:600}}>Soldé ✓</button>
+        </div>
+      </div>}
+
       <div><label style={labelStyle}>Score (/100)</label><input type="number" min="0" max="100" value={f.score} onChange={e=>upd("score",parseInt(e.target.value)||0)} style={inputStyle}/></div>
       <div><label style={labelStyle}>Notes</label><textarea value={f.notes} onChange={e=>upd("notes",e.target.value)} rows={3} style={{...inputStyle,resize:"vertical",fontFamily:"inherit"}}/></div>
       <div style={{display:"flex",gap:10,marginTop:8}}>
@@ -471,7 +581,7 @@ function EditForm({lead,onSave,onDelete,saving,c,inputStyle,labelStyle}){
 }
 
 function CreateForm({onSave,saving,c,inputStyle,labelStyle}){
-  const[f,setF]=useState({prenom:"",email:"",telephone:"",type_interet:"",date_souhaitee:"",occasion:"",nombre_personnes:"",statut:"nouveau",temperature:"tiede",score:50,notes:""});
+  const[f,setF]=useState({prenom:"",email:"",telephone:"",type_interet:"",date_souhaitee:"",occasion:"",nombre_personnes:"",statut:"nouveau",temperature:"tiede",score:50,notes:"",acompte_recu:""});
   const upd=(k,v)=>setF({...f,[k]:v});
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -490,8 +600,8 @@ function CreateForm({onSave,saving,c,inputStyle,labelStyle}){
         <div><label style={labelStyle}>Statut</label><select value={f.statut} onChange={e=>upd("statut",e.target.value)} style={inputStyle}>{STATUTS.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}</select></div>
         <div><label style={labelStyle}>Température</label><select value={f.temperature} onChange={e=>upd("temperature",e.target.value)} style={inputStyle}>{TEMPS.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}</select></div>
       </div>
-      <div><label style={labelStyle}>Score (/100)</label><input type="number" min="0" max="100" value={f.score} onChange={e=>upd("score",parseInt(e.target.value)||0)} style={inputStyle}/></div>
-      <div><label style={labelStyle}>Notes</label><textarea value={f.notes} onChange={e=>upd("notes",e.target.value)} rows={3} placeholder="Infos utiles..." style={{...inputStyle,resize:"vertical",fontFamily:"inherit"}}/></div>
+      <div><label style={labelStyle}>Acompte reçu (€)</label><input type="number" value={f.acompte_recu} onChange={e=>upd("acompte_recu",e.target.value)} placeholder="0" style={inputStyle}/></div>
+      <div><label style={labelStyle}>Notes</label><textarea value={f.notes} onChange={e=>upd("notes",e.target.value)} rows={2} placeholder="Infos utiles..." style={{...inputStyle,resize:"vertical",fontFamily:"inherit"}}/></div>
       <button onClick={()=>{if(!f.prenom){alert("Prénom obligatoire");return;}onSave(f);}} disabled={saving} style={{background:c.ac,color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:600,cursor:"pointer",opacity:saving?0.5:1,marginTop:8}}>{saving?"Création…":"Créer le prospect"}</button>
     </div>
   );
