@@ -94,18 +94,20 @@ export default function App(){
   },[yr,mo,now,sb]);
   useEffect(()=>{load();},[load]);
 
-  // Financial calculations
+  // Prix effectif d'un lead : prix_custom si défini, sinon tarif catalogue
+  const prixEffectif=l=>parseFloat(l.prix_custom||0)||TX[l.type_interet]||0;
+
+  // Financial calculations — réactif à chaque sauvegarde via allLeads
   const finCalc=useMemo(()=>{
     const reserves=allLeads.filter(l=>l.statut==="reserve");
-    const chauds=allLeads.filter(l=>l.temperature==="chaud"&&l.statut!=="reserve");
-    const autres=allLeads.filter(l=>l.temperature!=="chaud"&&l.statut!=="reserve");
-    // Encaissé = acomptes reçus sur réservations
+    // Encaissé = somme des acomptes reçus sur toutes les réservations
     const encaisse=reserves.reduce((s,l)=>s+parseFloat(l.acompte_recu||0),0);
-    // Restant = montant total réservations - acomptes déjà reçus
-    const totalReserve=reserves.reduce((s,l)=>s+(TX[l.type_interet]||0),0);
+    // Total résas = prix effectif (custom ou catalogue) de chaque résa
+    const totalReserve=reserves.reduce((s,l)=>s+prixEffectif(l),0);
+    // Restant = ce qu'il reste à encaisser sur les résas
     const restant=totalReserve-encaisse;
-    // Pipeline potentiel = chauds + tièdes datés
-    const potentiel=datedLeads.filter(l=>l.statut!=="reserve").reduce((s,l)=>s+(TX[l.type_interet]||0),0);
+    // Pipeline = prix effectif des leads datés non encore réservés
+    const potentiel=datedLeads.filter(l=>l.statut!=="reserve").reduce((s,l)=>s+prixEffectif(l),0);
     return{encaisse,restant,totalReserve,potentiel,nReserves:reserves.length};
   },[allLeads,datedLeads]);
 
@@ -286,7 +288,7 @@ export default function App(){
                 <div style={{flex:1,borderLeft:`0.5px solid ${isNow?c.ac+"40":c.bd+"15"}`,padding:"6px 10px",display:"flex",flexDirection:"column",gap:6}}>
                   {hLeads.map((l,li)=>{
                     const lcol=lc(l);const fm=FM[l.type_interet]||{c:c.tx3,l:"—",i:"👤"};const dt=DT[l.type_interet]||[h,h+2];
-                    const prix=TX[l.type_interet]||0;const acompte=parseFloat(l.acompte_recu||0);const restant=prix-acompte;
+                    const prix=parseFloat(l.prix_custom||0)||TX[l.type_interet]||0;const acompte=parseFloat(l.acompte_recu||0);const restant=prix-acompte;
                     return(
                       <div key={li} onClick={()=>setEdit(l)} style={{background:`${lcol}10`,border:`0.5px solid ${lcol}40`,borderLeft:`3px solid ${lcol}`,borderRadius:10,padding:"10px 14px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                         <div style={{flex:1,minWidth:0}}>
@@ -442,7 +444,7 @@ export default function App(){
               const fm=FM[l.type_interet]||{c:c.tx3,l:"—",i:"👤"};
               const ago=l.derniere_interaction?Math.round((now-new Date(l.derniere_interaction))/864e5):null;
               const lcol=lc(l);
-              const prix=TX[l.type_interet]||0;const acompte=parseFloat(l.acompte_recu||0);
+              const prix=parseFloat(l.prix_custom||0)||TX[l.type_interet]||0;const acompte=parseFloat(l.acompte_recu||0);
               return(
                 <div key={i} onClick={()=>setEdit(l)} style={{background:c.s2,borderRadius:12,padding:mob?10:12,border:`0.5px solid ${c.bd}`,display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"transform 0.1s"}} onMouseEnter={e=>e.currentTarget.style.transform="scale(1.005)"} onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
                   <div style={{width:34,height:34,borderRadius:10,background:`${fm.c}10`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>{fm.i}</div>
@@ -490,7 +492,7 @@ function Modal({children,onClose,mob,c,saving,title,subtitle}){
 function MiniCard({l,c,now,lc,setEdit,FM}){
   const fm=FM[l.type_interet]||{c:c.tx3,l:"—",i:"👤"};const lcol=lc(l);
   const ago=l.derniere_interaction?Math.round((now-new Date(l.derniere_interaction))/864e5):null;
-  const prix=TX[l.type_interet]||0;const acompte=parseFloat(l.acompte_recu||0);
+  const prix=parseFloat(l.prix_custom||0)||TX[l.type_interet]||0;const acompte=parseFloat(l.acompte_recu||0);
   return(
     <div onClick={e=>{e.stopPropagation();setEdit(l);}} style={{background:c.s2,borderRadius:10,padding:12,border:`0.5px solid ${c.bd}`,cursor:"pointer",borderLeft:`3px solid ${lcol}`}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
