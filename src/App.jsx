@@ -116,7 +116,7 @@ export default function App(){
     try{
       const cl={};
       // Champs financiers : toujours envoyés (types mixtes string/number sinon ignorés)
-      const financialKeys=["acompte_recu","montant_total_encaisse","prix_custom"];
+      const financialKeys=["acompte_recu","montant_total_encaisse","prix_custom","moyen_paiement_solde","numero_facture"];
       for(const k in updates){
         const isDiff=String(updates[k])!==String(edit[k]??'');
         const isFinancial=financialKeys.includes(k);
@@ -130,6 +130,34 @@ export default function App(){
   };
   const createLead=async(data)=>{setSaving(true);try{const cl={...data};cl.instagram_username=cl.instagram_username||("manuel_"+Date.now());cl.source=cl.source||"manuel";cl.statut=cl.statut||"nouveau";cl.temperature=cl.temperature||"tiede";cl.score=cl.score||50;cl.nombre_messages=0;const r=await fetch(`${SB}/rest/v1/leads`,{method:"POST",headers:{apikey:SK,Authorization:`Bearer ${SK}`,"Content-Type":"application/json","Prefer":"return=minimal"},body:JSON.stringify(cl)});if(!r.ok)throw new Error(await r.text());await load();setCreating(false);}catch(e){alert("Erreur: "+e.message);}setSaving(false);};
   const deleteLead=async(id)=>{if(!confirm("Supprimer ce prospect ?"))return;setSaving(true);try{await fetch(`${SB}/rest/v1/leads?id=eq.${id}`,{method:"DELETE",headers:{apikey:SK,Authorization:`Bearer ${SK}`}});await load();setEdit(null);}catch(e){}setSaving(false);};
+
+  const marquerSolde=async(leadId,moyen)=>{
+    setSaving(true);
+    try{
+      const lead=allLeads.find(l=>l.id===leadId);
+      if(!lead)throw new Error("Lead introuvable");
+      const prix=parseFloat(lead.prix_custom||0)||TX[lead.type_interet]||0;
+      const numRes=await fetch(`${SB}/rest/v1/rpc/next_facture_numero`,{
+        method:"POST",
+        headers:{apikey:SK,Authorization:`Bearer ${SK}`,"Content-Type":"application/json"},
+        body:JSON.stringify({p_annee:new Date().getFullYear()})
+      });
+      const numero=await numRes.json();
+      await fetch(`${SB}/rest/v1/leads?id=eq.${leadId}`,{
+        method:"PATCH",
+        headers:{apikey:SK,Authorization:`Bearer ${SK}`,"Content-Type":"application/json","Prefer":"return=minimal"},
+        body:JSON.stringify({acompte_recu:prix,montant_total_encaisse:prix,statut:"reserve",moyen_paiement_solde:moyen,numero_facture:numero,date_solde:new Date().toISOString()})
+      });
+      fetch("https://robinplhs.app.n8n.cloud/webhook/solde-facture",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({lead_id:leadId,prenom:lead.prenom,email:lead.email,telephone:lead.telephone,type_interet:lead.type_interet,date_souhaitee:lead.date_souhaitee,occasion:lead.occasion,nb_personnes:lead.nombre_personnes,prix_total:prix,moyen_paiement:moyen,numero_facture:numero,notes:lead.notes||""})
+      }).catch(()=>{});
+      await load();setEdit(null);
+      alert(`✅ ${lead.prenom} soldé — Facture ${numero} en cours de génération`);
+    }catch(e){alert("Erreur: "+e.message);}
+    setSaving(false);
+  };
 
   const lfd=d=>sortLeads(datedLeads.filter(l=>l.pd&&l.pd.getFullYear()===yr&&l.pd.getMonth()===mo&&l.pd.getDate()===d));
   const wfd=d=>wx[`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`]||null;
@@ -357,7 +385,7 @@ export default function App(){
         <CreateForm onSave={createLead} saving={saving} c={c} inputStyle={inputStyle} labelStyle={labelStyle}/>
       </Modal>}
       {edit&&<Modal onClose={()=>!saving&&setEdit(null)} mob={mob} c={c} saving={saving} title={edit.prenom?.replace(/^\w/,x=>x.toUpperCase())||edit.instagram_username} subtitle="Modifier prospect">
-        <EditForm lead={edit} onSave={saveLead} onDelete={deleteLead} saving={saving} c={c} inputStyle={inputStyle} labelStyle={labelStyle}/>
+        <EditForm lead={edit} onSave={saveLead} onDelete={deleteLead} onSolde={marquerSolde} saving={saving} c={c} inputStyle={inputStyle} labelStyle={labelStyle}/>
       </Modal>}
 
       {/* HEADER */}
@@ -525,7 +553,7 @@ function MiniCard({l,c,now,lc,setEdit,FM}){
   );
 }
 
-function EditForm({lead,onSave,onDelete,saving,c,inputStyle,labelStyle}){
+function EditForm({lead,onSave,onDelete,onSolde,saving,c,inputStyle,labelStyle}){
   const prixBase=TX[lead.type_interet]||0;
   const[f,setF]=useState({
     prenom:lead.prenom||"",email:lead.email||"",telephone:lead.telephone||"",
@@ -537,12 +565,14 @@ function EditForm({lead,onSave,onDelete,saving,c,inputStyle,labelStyle}){
     montant_total_encaisse:lead.montant_total_encaisse||"",
     prix_custom:lead.prix_custom||""
   });
+  const[moyenSolde,setMoyenSolde]=useState(lead.moyen_paiement_solde||null);
+  const[soldePending,setSoldePending]=useState(false);
   const upd=(k,v)=>setF({...f,[k]:v});
-  // prix = custom si défini, sinon prix standard de la prestation
   const prixStandard=TX[f.type_interet]||0;
   const prix=parseFloat(f.prix_custom||0)||prixStandard;
   const acompte=parseFloat(f.acompte_recu||0);
   const restant=prix>0?prix-acompte:0;
+  const isSolde=lead.moyen_paiement_solde||acompte>=prix;
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -601,8 +631,31 @@ function EditForm({lead,onSave,onDelete,saving,c,inputStyle,labelStyle}){
           <button onClick={()=>upd("acompte_recu","50")} style={{background:c.s3,border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",color:c.tx}}>50€</button>
           <button onClick={()=>upd("acompte_recu","100")} style={{background:c.s3,border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",color:c.tx}}>100€</button>
           <button onClick={()=>upd("acompte_recu",String(Math.round(prix/2)))} style={{background:c.s3,border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",color:c.tx}}>50% ({Math.round(prix/2)}€)</button>
-          <button onClick={()=>upd("acompte_recu",String(prix))} style={{background:`${c.gn}20`,border:`0.5px solid ${c.gn}40`,borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",color:c.gn,fontWeight:600}}>Soldé ✓</button>
         </div>
+        {/* BOUTON SOLDÉ avec choix du moyen */}
+        {!isSolde&&prix>0&&<div style={{marginTop:12,background:`${c.gn}08`,border:`0.5px solid ${c.gn}30`,borderRadius:10,padding:12}}>
+          <div style={{fontSize:10,fontWeight:600,color:c.gn,marginBottom:8}}>💳 Marquer comme soldé</div>
+          <div style={{fontSize:11,color:c.tx2,marginBottom:10}}>Solde restant : <b style={{color:c.gn}}>{restant}€</b> — Choisir le mode de paiement :</div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>{if(confirm(`Confirmer paiement en ESPÈCES de ${restant}€ ?`)){onSolde(lead.id,"especes");}}}
+              disabled={saving||restant<=0}
+              style={{flex:1,background:`${c.or}15`,border:`1.5px solid ${c.or}`,borderRadius:10,padding:"10px 8px",fontSize:13,fontWeight:700,cursor:"pointer",color:c.or,opacity:saving?0.5:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              💵 Espèces
+            </button>
+            <button onClick={()=>{if(confirm(`Confirmer paiement CB SumUp de ${restant}€ ?`)){onSolde(lead.id,"cb");}}}
+              disabled={saving||restant<=0}
+              style={{flex:1,background:`${c.ac}15`,border:`1.5px solid ${c.ac}`,borderRadius:10,padding:"10px 8px",fontSize:13,fontWeight:700,cursor:"pointer",color:c.ac,opacity:saving?0.5:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              💳 CB SumUp
+            </button>
+          </div>
+        </div>}
+        {isSolde&&<div style={{marginTop:10,background:`${c.gn}12`,border:`0.5px solid ${c.gn}40`,borderRadius:10,padding:"10px 14px",display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:16}}>✅</span>
+          <div>
+            <div style={{fontSize:12,fontWeight:700,color:c.gn}}>Soldé</div>
+            <div style={{fontSize:10,color:c.tx3}}>{lead.moyen_paiement_solde==="especes"?"Réglé en espèces":lead.moyen_paiement_solde==="cb"?"Réglé par CB SumUp":"Paiement complet"}{lead.numero_facture?` · Facture ${lead.numero_facture}`:""}</div>
+          </div>
+        </div>}
       </div>}
 
       <div><label style={labelStyle}>Score (/100)</label><input type="number" min="0" max="100" value={f.score} onChange={e=>upd("score",parseInt(e.target.value)||0)} style={inputStyle}/></div>
