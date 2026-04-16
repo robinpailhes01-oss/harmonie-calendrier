@@ -58,6 +58,10 @@ export default function App(){
   const[edit,setEdit]=useState(null);
   const[saving,setSaving]=useState(false);
   const[creating,setCreating]=useState(false);
+  const[mainTab,setMainTab]=useState("cal");
+  const[depenses,setDepenses]=useState([]);
+  const[newDep,setNewDep]=useState({montant:"",categorie:"carburant",description:"",date:new Date().toISOString().split("T")[0]});
+  const[savingDep,setSavingDep]=useState(false);
   const W=useWin();const mob=W<768;
   const yr=cur.getFullYear(),mo=cur.getMonth();
   const fd=(new Date(yr,mo,1).getDay()+6)%7,dim=new Date(yr,mo+1,0).getDate();
@@ -91,6 +95,7 @@ export default function App(){
       const m={};if(mt.daily)mt.daily.time.forEach((d2,i)=>{m[d2]={code:mt.daily.weathercode[i],hi:Math.round(mt.daily.temperature_2m_max[i]),lo:Math.round(mt.daily.temperature_2m_min[i]),wind:Math.round(mt.daily.wind_speed_10m_max[i]),wave:mr?.daily?.wave_height_max?.[i]?parseFloat(mr.daily.wave_height_max[i]).toFixed(1):null};});
       setWx(m);
     }catch(e){}
+    try{const dp2=await sb("depenses?select=*&order=date.desc&limit=200");setDepenses(Array.isArray(dp2)?dp2:[]);}catch(e){}
   },[yr,mo,now,sb]);
   useEffect(()=>{load();},[load]);
 
@@ -159,6 +164,21 @@ export default function App(){
     setSaving(false);
   };
 
+  const addDepense=async()=>{
+    if(!newDep.montant||parseFloat(newDep.montant)<=0){alert("Montant requis");return;}
+    setSavingDep(true);
+    try{
+      await fetch(SB+"/rest/v1/depenses",{method:"POST",headers:{apikey:SK,Authorization:"Bearer "+SK,"Content-Type":"application/json","Prefer":"return=minimal"},body:JSON.stringify({montant:parseFloat(newDep.montant),categorie:newDep.categorie,description:newDep.description,date:newDep.date})});
+      setNewDep({montant:"",categorie:"carburant",description:"",date:new Date().toISOString().split("T")[0]});
+      await load();
+    }catch(e){alert("Erreur: "+e.message);}
+    setSavingDep(false);
+  };
+  const deleteDepense=async(id)=>{
+    if(!confirm("Supprimer ?"))return;
+    await fetch(SB+"/rest/v1/depenses?id=eq."+id,{method:"DELETE",headers:{apikey:SK,Authorization:"Bearer "+SK}});
+    await load();
+  };
   const lfd=d=>sortLeads(datedLeads.filter(l=>l.pd&&l.pd.getFullYear()===yr&&l.pd.getMonth()===mo&&l.pd.getDate()===d));
   const wfd=d=>wx[`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`]||null;
   const wxForDate=d=>wx[`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`]||null;
@@ -446,7 +466,14 @@ export default function App(){
       </header>
 
       {/* NAV */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:mob?"10px 12px":"14px 28px"}}>
+      <div style={{display:"flex",borderBottom:`0.5px solid ${c.bd}`,overflowX:"auto"}}>
+        {[{k:"cal",l:"Calendrier"},{k:"crm",l:"Prospects"},{k:"finances",l:"Finances"}].map(t=>(
+          <button key={t.k} onClick={()=>setMainTab(t.k)} style={{padding:"10px 16px",border:"none",borderBottom:mainTab===t.k?`2px solid ${c.ac}`:"2px solid transparent",background:"transparent",color:mainTab===t.k?c.ac:c.tx2,fontSize:mob?12:13,fontWeight:mainTab===t.k?600:400,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>
+            {t.l}
+          </button>
+        ))}
+      </div>
+      {mainTab==="cal"&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:mob?"10px 12px":"14px 28px"}}>
         <div style={{display:"flex",alignItems:"center",gap:2}}>
           <button onClick={goBack} style={{background:"none",border:"none",color:c.ac,fontSize:22,cursor:"pointer",padding:"2px 8px",lineHeight:1}}>‹</button>
           <div style={{fontSize:mob?16:21,fontWeight:700,minWidth:mob?140:220,textAlign:"center",letterSpacing:"-0.04em"}}>{navTitle()}</div>
@@ -460,13 +487,14 @@ export default function App(){
             ))}
           </div>
         </div>
-      </div>
+      </div>}
 
-      {view==="month"&&<MonthView/>}
-      {view==="week"&&<WeekView/>}
-      {view==="day"&&<DayView/>}
+      {mainTab==="cal"&&view==="month"&&<MonthView/>}
+      {mainTab==="cal"&&view==="week"&&<WeekView/>}
+      {mainTab==="cal"&&view==="day"&&<DayView/>}
+      {mainTab==="finances"&&<FinancesView c={c} mob={mob} depenses={depenses} fin={fin} allLeads={allLeads} newDep={newDep} setNewDep={setNewDep} addDepense={addDepense} deleteDepense={deleteDepense} savingDep={savingDep}/>}
 
-      {/* CRM */}
+      {/* CRM — toujours visible */}
       <div style={{padding:mob?"0 12px 28px":"0 28px 32px"}}>
         <div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:16,padding:mob?16:24}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
@@ -691,6 +719,98 @@ function CreateForm({onSave,saving,c,inputStyle,labelStyle}){
       <div><label style={labelStyle}>Acompte reçu (€)</label><input type="number" value={f.acompte_recu} onChange={e=>upd("acompte_recu",e.target.value)} placeholder="0" style={inputStyle}/></div>
       <div><label style={labelStyle}>Notes</label><textarea value={f.notes} onChange={e=>upd("notes",e.target.value)} rows={2} placeholder="Infos utiles..." style={{...inputStyle,resize:"vertical",fontFamily:"inherit"}}/></div>
       <button onClick={()=>{if(!f.prenom){alert("Prénom obligatoire");return;}onSave(f);}} disabled={saving} style={{background:c.ac,color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:600,cursor:"pointer",opacity:saving?0.5:1,marginTop:8}}>{saving?"Création…":"Créer le prospect"}</button>
+    </div>
+  );
+}
+function FinancesView({c,mob,depenses,fin,allLeads,newDep,setNewDep,addDepense,deleteDepense,savingDep}){
+  const CATS=[
+    {v:"carburant",l:"Carburant",col:"#FF9F0A"},
+    {v:"maintenance",l:"Maintenance",col:"#007AFF"},
+    {v:"assurance",l:"Assurance",col:"#5856D6"},
+    {v:"marina",l:"Port/Marina",col:"#34C759"},
+    {v:"marketing",l:"Marketing",col:"#FF2D55"},
+    {v:"materiel",l:"Materiel",col:"#64D2FF"},
+    {v:"salaires",l:"Prestataires",col:"#BF5AF2"},
+    {v:"autre",l:"Autre",col:"#8A8A9A"},
+  ];
+  const catCol=v=>(CATS.find(x=>x.v===v)||CATS[7]).col;
+  const catLbl=v=>(CATS.find(x=>x.v===v)||CATS[7]).l;
+  const totalDep=depenses.reduce((s,d)=>s+parseFloat(d.montant||0),0);
+  const profit=fin.rev-totalDep;
+  const byMonth=depenses.reduce((acc,d)=>{const m=(d.date||"").substring(0,7);if(!acc[m])acc[m]=[];acc[m].push(d);return acc;},{});
+  const inputS={width:"100%",padding:"10px 12px",borderRadius:10,border:`0.5px solid ${c.bd}`,background:c.s2,color:c.tx,fontSize:14,marginTop:4};
+  const labelS={fontSize:11,fontWeight:600,color:c.tx2,letterSpacing:"0.02em",textTransform:"uppercase"};
+
+  return(
+    <div style={{padding:mob?"0 12px 32px":"0 28px 40px"}}>
+
+      {/* KPIs */}
+      <div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"repeat(3,1fr)",gap:10,marginBottom:20}}>
+        {[
+          {l:"Revenus",v:fin.rev+"€",sub:fin.nR+" opérations",cl:c.gn},
+          {l:"Dépenses",v:totalDep.toFixed(0)+"€",sub:depenses.length+" entrées",cl:c.red},
+          {l:"Résultat net",v:(profit>=0?"+":"")+profit.toFixed(0)+"€",sub:profit>=0?"Bénéfice":"Déficit",cl:profit>=0?c.gn:c.red},
+        ].map((k,i)=>(
+          <div key={i} style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:14,padding:"14px 16px"}}>
+            <div style={{fontSize:10,color:c.tx3,fontWeight:500,marginBottom:4}}>{k.l}</div>
+            <div style={{fontSize:mob?20:24,fontWeight:700,letterSpacing:"-0.04em",color:k.cl}}>{k.v}</div>
+            <div style={{fontSize:10,color:c.tx3,marginTop:2}}>{k.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* FORMULAIRE */}
+      <div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:16,padding:mob?16:20,marginBottom:20}}>
+        <div style={{fontSize:15,fontWeight:700,marginBottom:14}}>+ Ajouter une dépense</div>
+        <div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"3fr 1fr 1fr",gap:10,marginBottom:12}}>
+          <div><label style={labelS}>Description</label><input value={newDep.description} onChange={e=>setNewDep({...newDep,description:e.target.value})} placeholder="ex: Gasoil moteur" style={inputS}/></div>
+          <div><label style={labelS}>Montant (€)</label><input type="number" min="0" step="0.01" value={newDep.montant} onChange={e=>setNewDep({...newDep,montant:e.target.value})} placeholder="0.00" style={inputS}/></div>
+          <div><label style={labelS}>Date</label><input type="date" value={newDep.date} onChange={e=>setNewDep({...newDep,date:e.target.value})} style={inputS}/></div>
+        </div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14}}>
+          {CATS.map(cat=>(
+            <button key={cat.v} onClick={()=>setNewDep({...newDep,categorie:cat.v})}
+              style={{padding:"5px 12px",borderRadius:20,border:`1px solid ${newDep.categorie===cat.v?cat.col:c.bd}`,background:newDep.categorie===cat.v?cat.col+"20":"transparent",color:newDep.categorie===cat.v?cat.col:c.tx2,fontSize:11,fontWeight:newDep.categorie===cat.v?600:400,cursor:"pointer"}}>
+              {cat.l}
+            </button>
+          ))}
+        </div>
+        <button onClick={addDepense} disabled={savingDep||!newDep.montant}
+          style={{background:c.ac,color:"#fff",border:"none",borderRadius:12,padding:"12px 24px",fontSize:14,fontWeight:600,cursor:"pointer",opacity:savingDep||!newDep.montant?0.5:1}}>
+          {savingDep?"Enregistrement...":"Enregistrer"}
+        </button>
+      </div>
+
+      {/* LISTE */}
+      <div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:16,padding:mob?16:20}}>
+        <div style={{fontSize:15,fontWeight:700,marginBottom:16}}>Historique</div>
+        {depenses.length===0&&<div style={{textAlign:"center",padding:"32px",color:c.tx3,fontSize:13}}>Aucune dépense enregistrée</div>}
+        {Object.keys(byMonth).sort().reverse().map(mois=>{
+          const items=byMonth[mois];
+          const tot=items.reduce((s,d)=>s+parseFloat(d.montant||0),0);
+          const[yr2,mo2]=mois.split("-");
+          const lbl=new Date(parseInt(yr2),parseInt(mo2)-1,1).toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
+          return(
+            <div key={mois} style={{marginBottom:16}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                <div style={{fontSize:12,fontWeight:600,color:c.tx2,textTransform:"capitalize"}}>{lbl}</div>
+                <div style={{fontSize:12,fontWeight:700,color:c.red}}>{tot.toFixed(2)}€</div>
+              </div>
+              {items.map((dep,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:c.s2,borderRadius:10,marginBottom:4,border:`0.5px solid ${c.bd}`}}>
+                  <div style={{width:8,height:8,borderRadius:"50%",background:catCol(dep.categorie),flexShrink:0}}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dep.description||catLbl(dep.categorie)}</div>
+                    <div style={{fontSize:10,color:c.tx3,marginTop:1}}>{catLbl(dep.categorie)} · {new Date(dep.date).toLocaleDateString("fr-FR")}</div>
+                  </div>
+                  <div style={{fontSize:14,fontWeight:700,color:c.red,flexShrink:0}}>{parseFloat(dep.montant).toFixed(2)}€</div>
+                  <button onClick={()=>deleteDepense(dep.id)} style={{background:"transparent",border:"none",color:c.tx3,fontSize:18,cursor:"pointer",padding:"0 4px",flexShrink:0}}>×</button>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
