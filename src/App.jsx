@@ -738,53 +738,69 @@ function FinancesView({c,mob,depenses,fin,allLeads,newDep,setNewDep,addDepense,d
   const totalDep=depenses.reduce((s,d)=>s+parseFloat(d.montant||0),0);
   const profit=fin.rev-totalDep;
   const byMonth=depenses.reduce((acc,d)=>{const m=(d.date||"").substring(0,7);if(!acc[m])acc[m]=[];acc[m].push(d);return acc;},{});
+
+  // Dépenses par catégorie pour le mini graphique
+  const byCat=CATS.map(cat=>{
+    const tot=depenses.filter(d=>d.categorie===cat.v).reduce((s,d)=>s+parseFloat(d.montant||0),0);
+    return{...cat,tot};
+  }).filter(x=>x.tot>0).sort((a,b)=>b.tot-a.tot);
+  const maxCat=byCat[0]?.tot||1;
+
   const inputS={width:"100%",padding:"10px 12px",borderRadius:10,border:`0.5px solid ${c.bd}`,background:c.s2,color:c.tx,fontSize:14,marginTop:4};
-  const labelS={fontSize:11,fontWeight:600,color:c.tx2,letterSpacing:"0.02em",textTransform:"uppercase"};
 
   return(
     <div style={{padding:mob?"0 12px 32px":"0 28px 40px"}}>
 
-      {/* KPIs */}
-      <div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"repeat(3,1fr)",gap:10,marginBottom:20}}>
-        {[
-          {l:"Revenus",v:fin.rev+"€",sub:fin.nR+" opérations",cl:c.gn},
-          {l:"Dépenses",v:totalDep.toFixed(0)+"€",sub:depenses.length+" entrées",cl:c.red},
-          {l:"Résultat net",v:(profit>=0?"+":"")+profit.toFixed(0)+"€",sub:profit>=0?"Bénéfice":"Déficit",cl:profit>=0?c.gn:c.red},
-        ].map((k,i)=>(
-          <div key={i} style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:14,padding:"14px 16px"}}>
-            <div style={{fontSize:10,color:c.tx3,fontWeight:500,marginBottom:4}}>{k.l}</div>
-            <div style={{fontSize:mob?20:24,fontWeight:700,letterSpacing:"-0.04em",color:k.cl}}>{k.v}</div>
-            <div style={{fontSize:10,color:c.tx3,marginTop:2}}>{k.sub}</div>
+      {/* FORMULAIRE RAPIDE — au top, ultra compact */}
+      <div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:16,padding:mob?"14px":"16px 20px",marginBottom:16}}>
+        <div style={{display:"flex",gap:8,alignItems:"flex-end",flexWrap:mob?"wrap":"nowrap"}}>
+          <div style={{flex:3,minWidth:mob?"100%":0}}>
+            <input value={newDep.description} onChange={e=>setNewDep({...newDep,description:e.target.value})
+            } placeholder="Description de la dépense..." style={{...inputS,marginTop:0}}/>
           </div>
-        ))}
-      </div>
-
-      {/* FORMULAIRE */}
-      <div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:16,padding:mob?16:20,marginBottom:20}}>
-        <div style={{fontSize:15,fontWeight:700,marginBottom:14}}>+ Ajouter une dépense</div>
-        <div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"3fr 1fr 1fr",gap:10,marginBottom:12}}>
-          <div><label style={labelS}>Description</label><input value={newDep.description} onChange={e=>setNewDep({...newDep,description:e.target.value})} placeholder="ex: Gasoil moteur" style={inputS}/></div>
-          <div><label style={labelS}>Montant (€)</label><input type="number" min="0" step="0.01" value={newDep.montant} onChange={e=>setNewDep({...newDep,montant:e.target.value})} placeholder="0.00" style={inputS}/></div>
-          <div><label style={labelS}>Date</label><input type="date" value={newDep.date} onChange={e=>setNewDep({...newDep,date:e.target.value})} style={inputS}/></div>
+          <div style={{flex:1,minWidth:80}}>
+            <input type="number" min="0" step="0.01" value={newDep.montant} onChange={e=>setNewDep({...newDep,montant:e.target.value})} placeholder="0 €" style={{...inputS,marginTop:0}}/>
+          </div>
+          <div style={{flex:1,minWidth:120}}>
+            <input type="date" value={newDep.date} onChange={e=>setNewDep({...newDep,date:e.target.value})} style={{...inputS,marginTop:0}}/>
+          </div>
+          <button onClick={addDepense} disabled={savingDep||!newDep.montant}
+            style={{background:c.ac,color:"#fff",border:"none",borderRadius:10,padding:"10px 18px",fontSize:13,fontWeight:600,cursor:"pointer",opacity:savingDep||!newDep.montant?0.5:1,whiteSpace:"nowrap",flexShrink:0}}>
+            {savingDep?"...":"+ Ajouter"}
+          </button>
         </div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14}}>
+        {/* Catégories */}
+        <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:10}}>
           {CATS.map(cat=>(
             <button key={cat.v} onClick={()=>setNewDep({...newDep,categorie:cat.v})}
-              style={{padding:"5px 12px",borderRadius:20,border:`1px solid ${newDep.categorie===cat.v?cat.col:c.bd}`,background:newDep.categorie===cat.v?cat.col+"20":"transparent",color:newDep.categorie===cat.v?cat.col:c.tx2,fontSize:11,fontWeight:newDep.categorie===cat.v?600:400,cursor:"pointer"}}>
+              style={{padding:"4px 10px",borderRadius:16,border:`1px solid ${newDep.categorie===cat.v?cat.col:c.bd}`,background:newDep.categorie===cat.v?cat.col+"20":"transparent",color:newDep.categorie===cat.v?cat.col:c.tx3,fontSize:10,fontWeight:newDep.categorie===cat.v?600:400,cursor:"pointer"}}>
               {cat.l}
             </button>
           ))}
         </div>
-        <button onClick={addDepense} disabled={savingDep||!newDep.montant}
-          style={{background:c.ac,color:"#fff",border:"none",borderRadius:12,padding:"12px 24px",fontSize:14,fontWeight:600,cursor:"pointer",opacity:savingDep||!newDep.montant?0.5:1}}>
-          {savingDep?"Enregistrement...":"Enregistrer"}
-        </button>
       </div>
 
-      {/* LISTE */}
+      {/* GRAPHIQUE BARRES PAR CATÉGORIE */}
+      {byCat.length>0&&<div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:16,padding:mob?14:20,marginBottom:16}}>
+        <div style={{fontSize:12,fontWeight:600,color:c.tx2,marginBottom:12}}>Dépenses par catégorie</div>
+        {byCat.map((cat,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+            <div style={{fontSize:11,color:c.tx2,width:mob?70:90,flexShrink:0}}>{cat.l}</div>
+            <div style={{flex:1,height:8,background:c.s2,borderRadius:4,overflow:"hidden"}}>
+              <div style={{width:`${(cat.tot/totalDep)*100}%`,height:"100%",background:cat.col,borderRadius:4,transition:"width 0.4s ease"}}/>
+            </div>
+            <div style={{fontSize:11,fontWeight:600,color:cat.col,width:60,textAlign:"right",flexShrink:0}}>{cat.tot.toFixed(0)}€</div>
+          </div>
+        ))}
+      </div>}
+
+      {/* LISTE PAR MOIS */}
       <div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:16,padding:mob?16:20}}>
-        <div style={{fontSize:15,fontWeight:700,marginBottom:16}}>Historique</div>
-        {depenses.length===0&&<div style={{textAlign:"center",padding:"32px",color:c.tx3,fontSize:13}}>Aucune dépense enregistrée</div>}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <div style={{fontSize:15,fontWeight:700}}>Historique</div>
+          <div style={{fontSize:12,color:c.tx3}}>{depenses.length} entrées · {totalDep.toFixed(0)}€</div>
+        </div>
+        {depenses.length===0&&<div style={{textAlign:"center",padding:"32px",color:c.tx3,fontSize:13}}>Aucune dépense — utilisez le formulaire ci-dessus</div>}
         {Object.keys(byMonth).sort().reverse().map(mois=>{
           const items=byMonth[mois];
           const tot=items.reduce((s,d)=>s+parseFloat(d.montant||0),0);
@@ -792,19 +808,19 @@ function FinancesView({c,mob,depenses,fin,allLeads,newDep,setNewDep,addDepense,d
           const lbl=new Date(parseInt(yr2),parseInt(mo2)-1,1).toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
           return(
             <div key={mois} style={{marginBottom:16}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-                <div style={{fontSize:12,fontWeight:600,color:c.tx2,textTransform:"capitalize"}}>{lbl}</div>
-                <div style={{fontSize:12,fontWeight:700,color:c.red}}>{tot.toFixed(2)}€</div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,paddingBottom:6,borderBottom:`0.5px solid ${c.bd}`}}>
+                <div style={{fontSize:11,fontWeight:600,color:c.tx2,textTransform:"capitalize"}}>{lbl}</div>
+                <div style={{fontSize:11,fontWeight:700,color:c.red}}>{tot.toFixed(2)}€</div>
               </div>
               {items.map((dep,i)=>(
-                <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:c.s2,borderRadius:10,marginBottom:4,border:`0.5px solid ${c.bd}`}}>
-                  <div style={{width:8,height:8,borderRadius:"50%",background:catCol(dep.categorie),flexShrink:0}}/>
+                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:i<items.length-1?`0.5px solid ${c.bd}20`:"none"}}>
+                  <div style={{width:7,height:7,borderRadius:"50%",background:catCol(dep.categorie),flexShrink:0}}/>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dep.description||catLbl(dep.categorie)}</div>
-                    <div style={{fontSize:10,color:c.tx3,marginTop:1}}>{catLbl(dep.categorie)} · {new Date(dep.date).toLocaleDateString("fr-FR")}</div>
+                    <div style={{fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dep.description||catLbl(dep.categorie)}</div>
+                    <div style={{fontSize:10,color:c.tx3}}>{catLbl(dep.categorie)} · {new Date(dep.date).toLocaleDateString("fr-FR")}</div>
                   </div>
-                  <div style={{fontSize:14,fontWeight:700,color:c.red,flexShrink:0}}>{parseFloat(dep.montant).toFixed(2)}€</div>
-                  <button onClick={()=>deleteDepense(dep.id)} style={{background:"transparent",border:"none",color:c.tx3,fontSize:18,cursor:"pointer",padding:"0 4px",flexShrink:0}}>×</button>
+                  <div style={{fontSize:13,fontWeight:600,color:c.red,flexShrink:0}}>{parseFloat(dep.montant).toFixed(2)}€</div>
+                  <button onClick={()=>deleteDepense(dep.id)} style={{background:"transparent",border:"none",color:c.tx3,fontSize:16,cursor:"pointer",padding:"0 2px",flexShrink:0,lineHeight:1}}>×</button>
                 </div>
               ))}
             </div>
