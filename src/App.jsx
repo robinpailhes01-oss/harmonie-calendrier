@@ -11,7 +11,15 @@ const TYPES=[{v:"nuit_classique",l:"Nuit Classique 150€"},{v:"nuit_prestige",l
 const STATUTS=[{v:"nouveau",l:"Nouveau"},{v:"en_conversation",l:"En conversation"},{v:"qualifie",l:"Qualifié"},{v:"reserve",l:"Réservé"},{v:"termine",l:"Terminé"},{v:"perdu",l:"Perdu"}];
 const TEMPS=[{v:"chaud",l:"Chaud"},{v:"tiede",l:"Tiède"},{v:"froid",l:"Froid"}];
 const DT={nuit_classique:[17,12],nuit_prestige:[17,12],sortie_mer_2h:[10,12],sortie_mer_3h:[10,13],sortie_mer_4h:[10,14]};
-const HOURS=Array.from({length:16},(_,i)=>i+7);
+// Heure d'affichage dans la vue jour (heure de début pour ce jour)
+const getDTForDay=(l,isNextDay)=>{
+  if(isNuit(l.type_interet)){
+    return isNextDay?{h:8,label:"8h → 12h (Départ)",fin:12}:{h:17,label:"17h → 12h J+1",fin:23};
+  }
+  const dt=DT[l.type_interet]||[10,12];
+  return{h:dt[0],label:dt[0]+"h → "+dt[1]+"h",fin:dt[1]};
+};
+const HOURS=Array.from({length:17},(_,i)=>i+7); // 7h→23h
 
 // Sort leads: réservé first, then chaud, then tiède, then froid
 function sortLeads(leads){
@@ -179,7 +187,16 @@ export default function App(){
     await fetch(SB+"/rest/v1/depenses?id=eq."+id,{method:"DELETE",headers:{apikey:SK,Authorization:"Bearer "+SK}});
     await load();
   };
-  const lfd=d=>sortLeads(datedLeads.filter(l=>l.pd&&l.pd.getFullYear()===yr&&l.pd.getMonth()===mo&&l.pd.getDate()===d));
+  const lfd=d=>sortLeads(datedLeads.filter(l=>{
+    if(!l.pd)return false;
+    if(l.pd.getFullYear()===yr&&l.pd.getMonth()===mo&&l.pd.getDate()===d)return true;
+    // Nuits : aussi visibles le lendemain
+    if(isNuit(l.type_interet)){
+      const prev=new Date(yr,mo,d-1);
+      return sameDay(l.pd,prev);
+    }
+    return false;
+  }));
   const wfd=d=>wx[`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`]||null;
   const wxForDate=d=>wx[`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`]||null;
   const isToday=d=>d instanceof Date?sameDay(d,now):(d===now.getDate()&&mo===now.getMonth()&&yr===now.getFullYear());
@@ -197,7 +214,17 @@ export default function App(){
     return sortLeads(base);
   },[allLeads,tab]);
   const weekDays=useMemo(()=>{const days=[];for(let i=0;i<7;i++){const d=new Date(weekStart);d.setDate(weekStart.getDate()+i);days.push(d);}return days;},[weekStart]);
-  const leadsForDate=d=>sortLeads(datedLeads.filter(l=>l.pd&&sameDay(l.pd,d)));
+  const isNuit=t=>t==="nuit_classique"||t==="nuit_prestige";
+  const leadsForDate=d=>sortLeads(datedLeads.filter(l=>{
+    if(!l.pd)return false;
+    if(sameDay(l.pd,d))return true;
+    // Les nuits apparaissent aussi le lendemain (check-out 12h)
+    if(isNuit(l.type_interet)){
+      const prev=new Date(d);prev.setDate(prev.getDate()-1);
+      return sameDay(l.pd,prev);
+    }
+    return false;
+  }));
 
   const goBack=()=>{if(view==="month")setCur(new Date(yr,mo-1,1));else if(view==="week"){const d=new Date(weekStart);d.setDate(d.getDate()-7);setWeekStart(new Date(d));}else{const d=new Date(dayView);d.setDate(d.getDate()-1);setDayView(new Date(d));}setSel(null);};
   const goFwd=()=>{if(view==="month")setCur(new Date(yr,mo+1,1));else if(view==="week"){const d=new Date(weekStart);d.setDate(d.getDate()+7);setWeekStart(new Date(d));}else{const d=new Date(dayView);d.setDate(d.getDate()+1);setDayView(new Date(d));}setSel(null);};
@@ -319,61 +346,113 @@ export default function App(){
 
   // ---- DAY VIEW ----
   const DayView=()=>{
-    const dl=leadsForDate(dayView);const w=wxForDate(dayView);
+    const dl=leadsForDate(dayView);
+    const w=wxForDate(dayView);
+    const ROW_H=56; // px par heure
+    // Calcule si un lead est "lendemain" (check-out d'une nuit)
+    const isCheckOut=(l)=>{
+      if(!isNuit(l.type_interet))return false;
+      const prev=new Date(dayView);prev.setDate(prev.getDate()-1);
+      return sameDay(l.pd,prev);
+    };
+    // Heure début pour positionnement
+    const getH=(l)=>isCheckOut(l)?8:DT[l.type_interet]?.[0]||10;
+    const getLabel=(l)=>isCheckOut(l)?"Départ 12h":"" + (DT[l.type_interet]?DT[l.type_interet][0]+"h → "+(isNuit(l.type_interet)?"12h J+1":DT[l.type_interet][1]+"h"):"");
+
     return(
       <div style={{padding:mob?"0 12px 24px":"0 28px 32px"}}>
-        {w&&<div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:12,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div style={{display:"flex",alignItems:"center",gap:12}}>
-            <span style={{fontSize:28}}>{wi(w.code)}</span>
-            <div><div style={{fontSize:22,fontWeight:700,letterSpacing:"-0.05em"}}>{w.hi}°<span style={{fontSize:14,fontWeight:400,color:c.tx2}}>/{w.lo}°</span></div>
-            <div style={{fontSize:11,color:c.tx2}}>💨 {w.wind}km/h{w.wave?` · 🌊${w.wave}m`:""}</div></div>
+        {/* Météo */}
+        {w&&<div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:12,padding:"10px 16px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:24}}>{wi(w.code)}</span>
+            <div>
+              <div style={{fontSize:18,fontWeight:700,letterSpacing:"-0.04em"}}>{w.hi}°<span style={{fontSize:12,fontWeight:400,color:c.tx2}}>/{w.lo}°</span></div>
+              <div style={{fontSize:10,color:c.tx2}}>💨{w.wind}km/h{w.wave?` · 🌊${w.wave}m`:""}</div>
+            </div>
           </div>
-          {isG(w)&&<div style={{background:`${c.gn}15`,border:`0.5px solid ${c.gn}40`,borderRadius:8,padding:"6px 12px",color:c.gn,fontSize:12,fontWeight:600}}>✓ Idéal</div>}
+          {isG(w)&&<div style={{background:`${c.gn}15`,border:`0.5px solid ${c.gn}40`,borderRadius:8,padding:"5px 10px",color:c.gn,fontSize:11,fontWeight:600}}>✓ Idéal</div>}
         </div>}
-        <div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:12,overflow:"hidden"}}>
-          {dl.length===0&&<div style={{textAlign:"center",padding:"48px 20px",color:c.tx3}}>
-            <div style={{fontSize:28,marginBottom:8}}>📅</div>
-            <div style={{fontSize:14,fontWeight:600,color:c.tx2}}>Journée libre</div>
-          </div>}
-          {HOURS.map((h,hi)=>{
-            const hLeads=dl.filter(l=>{const dt=DT[l.type_interet];return dt&&dt[0]===h;});
-            const isNow=isToday(dayView)&&now.getHours()===h;
-            if(hLeads.length===0&&!isNow)return(
-              <div key={h} style={{display:"flex",borderBottom:hi<HOURS.length-1?`0.5px solid ${c.bd}15`:"none",minHeight:40,opacity:0.4}}>
-                <div style={{width:52,padding:"10px 10px 0",fontSize:10,color:c.tx3,textAlign:"right",flexShrink:0}}>{h}h</div>
-                <div style={{flex:1,borderLeft:`0.5px solid ${c.bd}15`}}/>
+
+        {/* Résumé événements du jour */}
+        {dl.length>0&&<div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+          {dl.map((l,i)=>{
+            const lcol=lc(l);const fm=FM[l.type_interet]||{i:"👤",l:"?"};
+            const checkout=isCheckOut(l);
+            return(
+              <div key={i} onClick={()=>setEdit(l)} style={{display:"flex",alignItems:"center",gap:8,background:c.s,border:`1px solid ${lcol}40`,borderLeft:`3px solid ${lcol}`,borderRadius:10,padding:"8px 12px",cursor:"pointer",flex:1,minWidth:mob?120:180}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:700,color:lcol}}>{fm.i} {l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}</div>
+                  <div style={{fontSize:10,color:c.tx2,marginTop:1}}>{fm.l}{checkout?" · Départ":""}{l.occasion?` · ${l.occasion}`:""}</div>
+                  <div style={{fontSize:10,color:c.tx3,marginTop:1}}>
+                    {checkout?"8h00 → 12h00":(DT[l.type_interet]?DT[l.type_interet][0]+"h00 → "+(isNuit(l.type_interet)?"12h00 J+1":DT[l.type_interet][1]+"h00"):"")}
+                  </div>
+                </div>
+                {l.statut==="reserve"&&<div style={{marginLeft:"auto",fontSize:9,fontWeight:600,padding:"2px 6px",borderRadius:8,background:`${c.gn}20`,color:c.gn}}>✓</div>}
               </div>
             );
+          })}
+        </div>}
+
+        {/* Timeline Google Calendar style */}
+        <div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:12,overflow:"hidden"}}>
+          {dl.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:c.tx3}}>
+            <div style={{fontSize:24,marginBottom:6}}>📅</div>
+            <div style={{fontSize:13,fontWeight:600,color:c.tx2}}>Journée libre</div>
+            {isG(w)&&<div style={{fontSize:11,color:c.gn,marginTop:4}}>Conditions parfaites</div>}
+          </div>}
+          {HOURS.map((h,hi)=>{
+            // Leads qui commencent À cette heure
+            const hLeads=dl.filter(l=>getH(l)===h);
+            const isNow=isToday(dayView)&&now.getHours()===h;
+            const isEmpty=hLeads.length===0&&!isNow;
             return(
-              <div key={h} style={{display:"flex",borderBottom:hi<HOURS.length-1?`0.5px solid ${c.bd}15`:"none",minHeight:hLeads.length>0?88:40,background:isNow?`${c.ac}04`:"transparent"}}>
-                <div style={{width:52,padding:"10px 10px 0",fontSize:10,color:isNow?c.ac:c.tx3,fontWeight:isNow?600:400,textAlign:"right",flexShrink:0}}>
-                  {h}h{isNow&&<div style={{width:6,height:6,borderRadius:"50%",background:c.ac,margin:"4px auto 0"}}/>}
+              <div key={h} style={{display:"flex",borderBottom:hi<HOURS.length-1?`0.5px solid ${c.bd}15`:"none",minHeight:isEmpty?36:hLeads.length>0?96:44,background:isNow?`${c.ac}04`:"transparent",position:"relative"}}>
+                {/* Heure */}
+                <div style={{width:48,padding:"8px 8px 0",fontSize:isEmpty?9:10,color:isNow?c.ac:isEmpty?c.tx3:c.tx2,fontWeight:isNow?600:isEmpty?400:500,textAlign:"right",flexShrink:0,letterSpacing:"-0.02em"}}>
+                  {h}h{isNow&&<div style={{width:6,height:6,borderRadius:"50%",background:c.ac,margin:"3px auto 0"}}/>}
                 </div>
-                <div style={{flex:1,borderLeft:`0.5px solid ${isNow?c.ac+"40":c.bd+"15"}`,padding:"6px 10px",display:"flex",flexDirection:"column",gap:6}}>
+                {/* Contenu */}
+                <div style={{flex:1,borderLeft:`0.5px solid ${isNow?c.ac+"50":c.bd+"20"}`,padding:hLeads.length>0?"8px 10px":"0",display:"flex",flexDirection:"column",gap:6}}>
                   {hLeads.map((l,li)=>{
-                    const lcol=lc(l);const fm=FM[l.type_interet]||{c:c.tx3,l:"—",i:"👤"};const dt=DT[l.type_interet]||[h,h+2];
-                    const prix=parseFloat(l.prix_custom||0)||TX[l.type_interet]||0;const acompte=parseFloat(l.acompte_recu||0);const restant=prix-acompte;
+                    const lcol=lc(l);
+                    const fm=FM[l.type_interet]||{c:c.tx3,l:"?",i:"👤"};
+                    const checkout=isCheckOut(l);
+                    const prix=parseFloat(l.prix_custom||0)||TX[l.type_interet]||0;
+                    const acompte=parseFloat(l.acompte_recu||0);
+                    const restant=prix-acompte;
+                    const heureLabel=checkout?"8h00 → 12h00 (Départ)":(DT[l.type_interet]?DT[l.type_interet][0]+"h00 → "+(isNuit(l.type_interet)?"12h00 J+1":DT[l.type_interet][1]+"h00"):"");
                     return(
-                      <div key={li} onClick={()=>setEdit(l)} style={{background:`${lcol}10`,border:`0.5px solid ${lcol}40`,borderLeft:`3px solid ${lcol}`,borderRadius:10,padding:"10px 14px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{display:"flex",alignItems:"center",gap:8}}>
-                            <div style={{fontSize:16,fontWeight:700,letterSpacing:"-0.03em",color:lcol}}>{l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}</div>
-                            {l.statut==="reserve"&&<span style={{fontSize:10,fontWeight:600,padding:"2px 7px",borderRadius:10,background:`${c.gn}20`,color:c.gn}}>✓ Réservé</span>}
+                      <div key={li} onClick={()=>setEdit(l)} style={{background:`${lcol}0D`,border:`0.5px solid ${lcol}35`,borderLeft:`3px solid ${lcol}`,borderRadius:10,padding:"10px 14px",cursor:"pointer"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            {/* Nom + badge */}
+                            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                              <div style={{fontSize:15,fontWeight:700,color:lcol}}>{l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}</div>
+                              {l.statut==="reserve"&&<span style={{fontSize:9,fontWeight:600,padding:"2px 6px",borderRadius:8,background:`${c.gn}20`,color:c.gn}}>✓ Réservé</span>}
+                              {checkout&&<span style={{fontSize:9,fontWeight:600,padding:"2px 6px",borderRadius:8,background:`${c.or}20`,color:c.or}}>Départ</span>}
+                            </div>
+                            {/* Prestation */}
+                            <div style={{fontSize:11,color:c.tx2,marginTop:2}}>{fm.i} {fm.l}{l.occasion?` · ${l.occasion}`:""}</div>
+                            {/* Contacts */}
+                            <div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>
+                              {l.telephone&&<span style={{fontSize:10,color:c.gn}}>📱 {l.telephone}</span>}
+                              {l.email&&<span style={{fontSize:10,color:c.tx3}}>✉ {l.email}</span>}
+                              {l.nombre_personnes&&<span style={{fontSize:10,color:c.tx3}}>👥 {l.nombre_personnes} pers.</span>}
+                            </div>
+                            {/* Notes */}
+                            {l.notes&&<div style={{fontSize:10,color:c.tx3,marginTop:4,fontStyle:"italic"}}>{l.notes.substring(0,100)}</div>}
+                            {/* Finances */}
+                            {prix>0&&<div style={{display:"flex",gap:6,marginTop:6,flexWrap:"wrap"}}>
+                              <span style={{fontSize:9,fontWeight:600,padding:"2px 7px",borderRadius:6,background:`${c.gn}15`,color:c.gn}}>💰 {prix}€</span>
+                              {acompte>0&&<span style={{fontSize:9,fontWeight:600,padding:"2px 7px",borderRadius:6,background:`${c.ac}15`,color:c.ac}}>✓ {acompte}€ reçu</span>}
+                              {restant>0&&<span style={{fontSize:9,fontWeight:600,padding:"2px 7px",borderRadius:6,background:`${c.or}15`,color:c.or}}>⏳ {restant}€ restant</span>}
+                            </div>}
                           </div>
-                          <div style={{fontSize:12,color:c.tx2,marginTop:2}}>{fm.i} {fm.l}{l.occasion?` · ${l.occasion}`:""}</div>
-                          {l.telephone&&<div style={{fontSize:11,color:c.gn,marginTop:3}}>📱 {l.telephone}</div>}
-                          {l.notes&&<div style={{fontSize:11,color:c.tx3,marginTop:5,fontStyle:"italic"}}>{l.notes.substring(0,80)}</div>}
-                          {/* Financial breakdown */}
-                          {prix>0&&<div style={{marginTop:8,display:"flex",gap:8,flexWrap:"wrap"}}>
-                            <div style={{background:`${c.gn}15`,borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:600,color:c.gn}}>💰 Total: {prix}€</div>
-                            {acompte>0&&<div style={{background:`${c.ac}15`,borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:600,color:c.ac}}>✓ Reçu: {acompte}€</div>}
-                            {acompte>0&&restant>0&&<div style={{background:`${c.or}15`,borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:600,color:c.or}}>⏳ Reste: {restant}€</div>}
-                            {acompte===0&&<div style={{background:`${c.or}15`,borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:600,color:c.or}}>⏳ À encaisser: {prix}€</div>}
-                          </div>}
-                        </div>
-                        <div style={{textAlign:"right",flexShrink:0,marginLeft:12}}>
-                          <div style={{fontSize:14,fontWeight:700,color:lcol}}>{dt[0]}h → {dt[1]}h</div>
-                          {l.nombre_personnes&&<div style={{fontSize:11,color:c.tx2,marginTop:2}}>👥 {l.nombre_personnes}</div>}
+                          {/* Horaires */}
+                          <div style={{textAlign:"right",flexShrink:0}}>
+                            <div style={{fontSize:13,fontWeight:700,color:lcol,whiteSpace:"nowrap"}}>{heureLabel}</div>
+                            {l.score&&<div style={{fontSize:9,color:c.tx3,marginTop:3}}>Score {l.score}</div>}
+                          </div>
                         </div>
                       </div>
                     );
