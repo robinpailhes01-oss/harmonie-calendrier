@@ -129,7 +129,7 @@ export default function App(){
     try{
       const cl={};
       // Champs financiers : toujours envoyés (types mixtes string/number sinon ignorés)
-      const financialKeys=["acompte_recu","montant_total_encaisse","prix_custom","moyen_paiement_solde","numero_facture"];
+      const financialKeys=["acompte_recu","montant_total_encaisse","prix_custom","moyen_paiement_solde","numero_facture","heure_debut","heure_fin"];
       for(const k in updates){
         const isDiff=String(updates[k])!==String(edit[k]??'');
         const isFinancial=financialKeys.includes(k);
@@ -187,16 +187,7 @@ export default function App(){
     await fetch(SB+"/rest/v1/depenses?id=eq."+id,{method:"DELETE",headers:{apikey:SK,Authorization:"Bearer "+SK}});
     await load();
   };
-  const lfd=d=>sortLeads(datedLeads.filter(l=>{
-    if(!l.pd)return false;
-    if(l.pd.getFullYear()===yr&&l.pd.getMonth()===mo&&l.pd.getDate()===d)return true;
-    // Nuits : aussi visibles le lendemain
-    if(isNuit(l.type_interet)){
-      const prev=new Date(yr,mo,d-1);
-      return sameDay(l.pd,prev);
-    }
-    return false;
-  }));
+  const lfd=d=>sortLeads(datedLeads.filter(l=>l.pd&&l.pd.getFullYear()===yr&&l.pd.getMonth()===mo&&l.pd.getDate()===d));
   const wfd=d=>wx[`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`]||null;
   const wxForDate=d=>wx[`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`]||null;
   const isToday=d=>d instanceof Date?sameDay(d,now):(d===now.getDate()&&mo===now.getMonth()&&yr===now.getFullYear());
@@ -215,16 +206,7 @@ export default function App(){
   },[allLeads,tab]);
   const weekDays=useMemo(()=>{const days=[];for(let i=0;i<7;i++){const d=new Date(weekStart);d.setDate(weekStart.getDate()+i);days.push(d);}return days;},[weekStart]);
   const isNuit=t=>t==="nuit_classique"||t==="nuit_prestige";
-  const leadsForDate=d=>sortLeads(datedLeads.filter(l=>{
-    if(!l.pd)return false;
-    if(sameDay(l.pd,d))return true;
-    // Les nuits apparaissent aussi le lendemain (check-out 12h)
-    if(isNuit(l.type_interet)){
-      const prev=new Date(d);prev.setDate(prev.getDate()-1);
-      return sameDay(l.pd,prev);
-    }
-    return false;
-  }));
+  const leadsForDate=d=>sortLeads(datedLeads.filter(l=>l.pd&&sameDay(l.pd,d)));
 
   const goBack=()=>{if(view==="month")setCur(new Date(yr,mo-1,1));else if(view==="week"){const d=new Date(weekStart);d.setDate(d.getDate()-7);setWeekStart(new Date(d));}else{const d=new Date(dayView);d.setDate(d.getDate()-1);setDayView(new Date(d));}setSel(null);};
   const goFwd=()=>{if(view==="month")setCur(new Date(yr,mo+1,1));else if(view==="week"){const d=new Date(weekStart);d.setDate(d.getDate()+7);setWeekStart(new Date(d));}else{const d=new Date(dayView);d.setDate(d.getDate()+1);setDayView(new Date(d));}setSel(null);};
@@ -349,15 +331,16 @@ export default function App(){
     const dl=leadsForDate(dayView);
     const w=wxForDate(dayView);
     const ROW_H=56; // px par heure
-    // Calcule si un lead est "lendemain" (check-out d'une nuit)
-    const isCheckOut=(l)=>{
-      if(!isNuit(l.type_interet))return false;
-      const prev=new Date(dayView);prev.setDate(prev.getDate()-1);
-      return sameDay(l.pd,prev);
+    // Heure début pour positionnement — custom si défini sinon défaut
+    const getH=(l)=>{
+      if(l.heure_debut){const parts=l.heure_debut.split(":");return parseInt(parts[0])||10;}
+      return DT[l.type_interet]?.[0]||10;
     };
-    // Heure début pour positionnement
-    const getH=(l)=>isCheckOut(l)?8:DT[l.type_interet]?.[0]||10;
-    const getLabel=(l)=>isCheckOut(l)?"Départ 12h":"" + (DT[l.type_interet]?DT[l.type_interet][0]+"h → "+(isNuit(l.type_interet)?"12h J+1":DT[l.type_interet][1]+"h"):"");
+    const getHeureLabel=(l)=>{
+      const debut=l.heure_debut||((DT[l.type_interet]?.[0]||10)+"h00");
+      const fin=l.heure_fin||(isNuit(l.type_interet)?"12h00 J+1":((DT[l.type_interet]?.[1]||12)+"h00"));
+      return debut.replace(":",":")+` → `+fin;
+    };
 
     return(
       <div style={{padding:mob?"0 12px 24px":"0 28px 32px"}}>
@@ -377,14 +360,13 @@ export default function App(){
         {dl.length>0&&<div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
           {dl.map((l,i)=>{
             const lcol=lc(l);const fm=FM[l.type_interet]||{i:"👤",l:"?"};
-            const checkout=isCheckOut(l);
             return(
               <div key={i} onClick={()=>setEdit(l)} style={{display:"flex",alignItems:"center",gap:8,background:c.s,border:`1px solid ${lcol}40`,borderLeft:`3px solid ${lcol}`,borderRadius:10,padding:"8px 12px",cursor:"pointer",flex:1,minWidth:mob?120:180}}>
                 <div>
                   <div style={{fontSize:13,fontWeight:700,color:lcol}}>{fm.i} {l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}</div>
-                  <div style={{fontSize:10,color:c.tx2,marginTop:1}}>{fm.l}{checkout?" · Départ":""}{l.occasion?` · ${l.occasion}`:""}</div>
+                  <div style={{fontSize:10,color:c.tx2,marginTop:1}}>{fm.l}{l.occasion?` · ${l.occasion}`:""}</div>
                   <div style={{fontSize:10,color:c.tx3,marginTop:1}}>
-                    {checkout?"8h00 → 12h00":(DT[l.type_interet]?DT[l.type_interet][0]+"h00 → "+(isNuit(l.type_interet)?"12h00 J+1":DT[l.type_interet][1]+"h00"):"")}
+                    {l.heure_debut?l.heure_debut+" → "+(l.heure_fin||""):(DT[l.type_interet]?DT[l.type_interet][0]+"h00 → "+(isNuit(l.type_interet)?"12h00 J+1":DT[l.type_interet][1]+"h00"):"")}
                   </div>
                 </div>
                 {l.statut==="reserve"&&<div style={{marginLeft:"auto",fontSize:9,fontWeight:600,padding:"2px 6px",borderRadius:8,background:`${c.gn}20`,color:c.gn}}>✓</div>}
@@ -416,11 +398,10 @@ export default function App(){
                   {hLeads.map((l,li)=>{
                     const lcol=lc(l);
                     const fm=FM[l.type_interet]||{c:c.tx3,l:"?",i:"👤"};
-                    const checkout=isCheckOut(l);
                     const prix=parseFloat(l.prix_custom||0)||TX[l.type_interet]||0;
                     const acompte=parseFloat(l.acompte_recu||0);
                     const restant=prix-acompte;
-                    const heureLabel=checkout?"8h00 → 12h00 (Départ)":(DT[l.type_interet]?DT[l.type_interet][0]+"h00 → "+(isNuit(l.type_interet)?"12h00 J+1":DT[l.type_interet][1]+"h00"):"");
+                    const heureLabel=getHeureLabel(l);
                     return(
                       <div key={li} onClick={()=>setEdit(l)} style={{background:`${lcol}0D`,border:`0.5px solid ${lcol}35`,borderLeft:`3px solid ${lcol}`,borderRadius:10,padding:"10px 14px",cursor:"pointer"}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
@@ -429,7 +410,6 @@ export default function App(){
                             <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                               <div style={{fontSize:15,fontWeight:700,color:lcol}}>{l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}</div>
                               {l.statut==="reserve"&&<span style={{fontSize:9,fontWeight:600,padding:"2px 6px",borderRadius:8,background:`${c.gn}20`,color:c.gn}}>✓ Réservé</span>}
-                              {checkout&&<span style={{fontSize:9,fontWeight:600,padding:"2px 6px",borderRadius:8,background:`${c.or}20`,color:c.or}}>Départ</span>}
                             </div>
                             {/* Prestation */}
                             <div style={{fontSize:11,color:c.tx2,marginTop:2}}>{fm.i} {fm.l}{l.occasion?` · ${l.occasion}`:""}</div>
@@ -670,7 +650,9 @@ function EditForm({lead,onSave,onDelete,onSolde,saving,c,inputStyle,labelStyle})
     score:lead.score||0,notes:lead.notes||"",
     acompte_recu:lead.acompte_recu||"",
     montant_total_encaisse:lead.montant_total_encaisse||"",
-    prix_custom:lead.prix_custom||""
+    prix_custom:lead.prix_custom||"",
+    heure_debut:lead.heure_debut||"",
+    heure_fin:lead.heure_fin||""
   });
   const[moyenSolde,setMoyenSolde]=useState(lead.moyen_paiement_solde||null);
   const[soldePending,setSoldePending]=useState(false);
@@ -692,6 +674,10 @@ function EditForm({lead,onSave,onDelete,onSolde,saving,c,inputStyle,labelStyle})
       <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10}}>
         <div><label style={labelStyle}>Date souhaitée</label><input value={f.date_souhaitee} onChange={e=>upd("date_souhaitee",e.target.value)} style={inputStyle}/></div>
         <div><label style={labelStyle}>Pers.</label><input type="number" value={f.nombre_personnes} onChange={e=>upd("nombre_personnes",e.target.value?parseInt(e.target.value):"")} style={inputStyle}/></div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div><label style={labelStyle}>Heure début</label><input type="time" value={f.heure_debut} onChange={e=>upd("heure_debut",e.target.value)} style={inputStyle} placeholder="ex: 10:00"/></div>
+        <div><label style={labelStyle}>Heure fin</label><input type="time" value={f.heure_fin} onChange={e=>upd("heure_fin",e.target.value)} style={inputStyle} placeholder="ex: 13:00"/></div>
       </div>
       <div><label style={labelStyle}>Occasion</label><input value={f.occasion} onChange={e=>upd("occasion",e.target.value)} style={inputStyle}/></div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -776,7 +762,7 @@ function EditForm({lead,onSave,onDelete,onSolde,saving,c,inputStyle,labelStyle})
 }
 
 function CreateForm({onSave,saving,c,inputStyle,labelStyle}){
-  const[f,setF]=useState({prenom:"",email:"",telephone:"",type_interet:"",date_souhaitee:"",occasion:"",nombre_personnes:"",statut:"nouveau",temperature:"tiede",score:50,notes:"",acompte_recu:""});
+  const[f,setF]=useState({prenom:"",email:"",telephone:"",type_interet:"",date_souhaitee:"",heure_debut:"",heure_fin:"",occasion:"",nombre_personnes:"",statut:"nouveau",temperature:"tiede",score:50,notes:"",acompte_recu:""});
   const upd=(k,v)=>setF({...f,[k]:v});
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -789,6 +775,10 @@ function CreateForm({onSave,saving,c,inputStyle,labelStyle}){
       <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10}}>
         <div><label style={labelStyle}>Date souhaitée</label><input value={f.date_souhaitee} onChange={e=>upd("date_souhaitee",e.target.value)} placeholder="ex: 15 mai" style={inputStyle}/></div>
         <div><label style={labelStyle}>Pers.</label><input type="number" value={f.nombre_personnes} onChange={e=>upd("nombre_personnes",e.target.value?parseInt(e.target.value):"")} style={inputStyle}/></div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div><label style={labelStyle}>Heure début</label><input type="time" value={f.heure_debut} onChange={e=>upd("heure_debut",e.target.value)} style={inputStyle}/></div>
+        <div><label style={labelStyle}>Heure fin</label><input type="time" value={f.heure_fin} onChange={e=>upd("heure_fin",e.target.value)} style={inputStyle}/></div>
       </div>
       <div><label style={labelStyle}>Occasion</label><input value={f.occasion} onChange={e=>upd("occasion",e.target.value)} placeholder="anniversaire, EVJF..." style={inputStyle}/></div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
