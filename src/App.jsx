@@ -395,13 +395,14 @@ export default function App(){
           {HOURS.map((h,hi)=>{
             // Leads qui commencent à cette demi-heure exacte
             const hLeads=dl.filter(l=>getH(l)===h);
-            const isNow=isToday(dayView)&&now.getHours()===h;
+            const isNow=isToday(dayView)&&(now.getHours()+(now.getMinutes()>=30?0.5:0))===h;
             const isEmpty=hLeads.length===0&&!isNow;
+            const SLOT=30; // px par slot de 30min
             return(
-              <div key={h} style={{display:"flex",borderBottom:hi<HOURS.length-1?`0.5px solid ${c.bd}15`:"none",minHeight:isEmpty?36:hLeads.length>0?96:44,background:isNow?`${c.ac}04`:"transparent",position:"relative"}}>
+              <div key={h} style={{display:"flex",borderBottom:hi<HOURS.length-1?`0.5px solid ${c.bd}15`:"none",minHeight:isEmpty?SLOT:hLeads.length>0?Math.max(SLOT*2,SLOT):SLOT,background:isNow?`${c.ac}04`:"transparent",position:"relative"}}>
                 {/* Heure */}
-                <div style={{width:48,padding:"6px 8px 0",fontSize:isEmpty?9:10,color:isNow?c.ac:isEmpty?c.tx3:c.tx2,fontWeight:isNow?600:isEmpty?400:500,textAlign:"right",flexShrink:0,letterSpacing:"-0.02em"}}>
-                  {h%1===0?Math.floor(h)+"h":(isEmpty?"":"30")}
+                <div style={{width:48,padding:"6px 8px 0",fontSize:9,color:isNow?c.ac:c.tx3,fontWeight:isNow?600:400,textAlign:"right",flexShrink:0,letterSpacing:"-0.02em"}}>
+                  {h%1===0?Math.floor(h)+"h":""}
                   {isNow&&<div style={{width:6,height:6,borderRadius:"50%",background:c.ac,margin:"3px auto 0"}}/>}
                 </div>
                 {/* Contenu */}
@@ -413,8 +414,15 @@ export default function App(){
                     const acompte=parseFloat(l.acompte_recu||0);
                     const restant=prix-acompte;
                     const heureLabel=getHeureLabel(l);
+                    // Calcul hauteur selon durée réelle
+                    const parseHDec=s=>{if(!s)return null;const p=s.split(":");return parseInt(p[0])+(parseInt(p[1]||"0")>=30?0.5:0);};
+                    const hDebut=parseHDec(l.heure_debut)||(DT[l.type_interet]?.[0]||h);
+                    const hFinDefault=isNuit(l.type_interet)?null:(DT[l.type_interet]?.[1]||hDebut+2);
+                    const hFin=parseHDec(l.heure_fin)||hFinDefault;
+                    const dureeSlots=hFin?Math.max(2,Math.round((hFin-hDebut)*2)):4; // nb de slots 30min
+                    const cardH=dureeSlots*30-4; // px
                     return(
-                      <div key={li} onClick={()=>setEdit(l)} style={{background:`${lcol}0D`,border:`0.5px solid ${lcol}35`,borderLeft:`3px solid ${lcol}`,borderRadius:10,padding:"10px 14px",cursor:"pointer"}}>
+                      <div key={li} onClick={()=>setEdit(l)} style={{background:`${lcol}0D`,border:`0.5px solid ${lcol}35`,borderLeft:`3px solid ${lcol}`,borderRadius:10,padding:"10px 14px",cursor:"pointer",minHeight:cardH,boxSizing:"border-box"}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
                           <div style={{flex:1,minWidth:0}}>
                             {/* Nom + badge */}
