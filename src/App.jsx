@@ -19,7 +19,9 @@ const getDTForDay=(l,isNextDay)=>{
   const dt=DT[l.type_interet]||[10,12];
   return{h:dt[0],label:dt[0]+"h → "+dt[1]+"h",fin:dt[1]};
 };
-const HOURS=Array.from({length:17},(_,i)=>i+7); // 7h→23h
+// Demi-heures : 7h00=7.0, 7h30=7.5, ..., 23h00=23.0
+const HOURS=Array.from({length:33},(_,i)=>7+i*0.5);
+const fmtH=h=>{const hh=Math.floor(h);const mm=h%1===0.5?"30":"00";return hh+"h"+mm;};
 
 // Sort leads: réservé first, then chaud, then tiède, then froid
 function sortLeads(leads){
@@ -297,10 +299,13 @@ export default function App(){
         </div>
         <div style={{border:`0.5px solid ${c.bd}25`,borderTop:"none",borderRadius:"0 0 12px 12px",overflow:"hidden"}}>
           {HOURS.map((h,hi)=>(
-            <div key={h} style={{display:"grid",gridTemplateColumns:"50px repeat(7,1fr)",borderBottom:hi<HOURS.length-1?`0.5px solid ${c.bd}18`:"none",minHeight:54}}>
-              <div style={{fontSize:10,color:c.tx3,padding:"6px 8px 0",fontWeight:500,textAlign:"right",borderRight:`0.5px solid ${c.bd}25`,flexShrink:0}}>{h}h</div>
+            <div key={h} style={{display:"grid",gridTemplateColumns:"50px repeat(7,1fr)",borderBottom:hi<HOURS.length-1?`0.5px solid ${c.bd}18`:"none",minHeight:28}}>
+              <div style={{fontSize:9,color:c.tx3,padding:"4px 6px 0",fontWeight:500,textAlign:"right",borderRight:`0.5px solid ${c.bd}25`,flexShrink:0}}>{h%1===0?Math.floor(h)+"h":""}</div>
               {weekDays.map((d,di)=>{
-                const hLeads=leadsForDate(d).filter(l=>{const dt=DT[l.type_interet];return dt&&dt[0]===h;});
+                const hLeads=leadsForDate(d).filter(l=>{
+                  const lh=l.heure_debut?(()=>{const p=l.heure_debut.split(":");return parseInt(p[0])+(parseInt(p[1]||"0")>=30?0.5:0);})():(DT[l.type_interet]?.[0]||null);
+                  return lh!==null&&lh===h;
+                });
                 const isNow=isToday(d)&&now.getHours()===h;
                 return(
                   <div key={di} style={{borderLeft:`0.5px solid ${c.bd}18`,padding:"3px 3px",position:"relative",background:isNow?`${c.ac}06`:"transparent"}}>
@@ -333,7 +338,12 @@ export default function App(){
     const ROW_H=56; // px par heure
     // Heure début pour positionnement — custom si défini sinon défaut
     const getH=(l)=>{
-      if(l.heure_debut){const parts=l.heure_debut.split(":");return parseInt(parts[0])||10;}
+      if(l.heure_debut){
+        const parts=l.heure_debut.split(":");
+        const hh=parseInt(parts[0])||10;
+        const mm=parseInt(parts[1]||"0");
+        return hh+(mm>=30?0.5:0);
+      }
       return DT[l.type_interet]?.[0]||10;
     };
     const getHeureLabel=(l)=>{
@@ -383,15 +393,16 @@ export default function App(){
             {isG(w)&&<div style={{fontSize:11,color:c.gn,marginTop:4}}>Conditions parfaites</div>}
           </div>}
           {HOURS.map((h,hi)=>{
-            // Leads qui commencent À cette heure
+            // Leads qui commencent à cette demi-heure exacte
             const hLeads=dl.filter(l=>getH(l)===h);
             const isNow=isToday(dayView)&&now.getHours()===h;
             const isEmpty=hLeads.length===0&&!isNow;
             return(
               <div key={h} style={{display:"flex",borderBottom:hi<HOURS.length-1?`0.5px solid ${c.bd}15`:"none",minHeight:isEmpty?36:hLeads.length>0?96:44,background:isNow?`${c.ac}04`:"transparent",position:"relative"}}>
                 {/* Heure */}
-                <div style={{width:48,padding:"8px 8px 0",fontSize:isEmpty?9:10,color:isNow?c.ac:isEmpty?c.tx3:c.tx2,fontWeight:isNow?600:isEmpty?400:500,textAlign:"right",flexShrink:0,letterSpacing:"-0.02em"}}>
-                  {h}h{isNow&&<div style={{width:6,height:6,borderRadius:"50%",background:c.ac,margin:"3px auto 0"}}/>}
+                <div style={{width:48,padding:"6px 8px 0",fontSize:isEmpty?9:10,color:isNow?c.ac:isEmpty?c.tx3:c.tx2,fontWeight:isNow?600:isEmpty?400:500,textAlign:"right",flexShrink:0,letterSpacing:"-0.02em"}}>
+                  {h%1===0?Math.floor(h)+"h":(isEmpty?"":"30")}
+                  {isNow&&<div style={{width:6,height:6,borderRadius:"50%",background:c.ac,margin:"3px auto 0"}}/>}
                 </div>
                 {/* Contenu */}
                 <div style={{flex:1,borderLeft:`0.5px solid ${isNow?c.ac+"50":c.bd+"20"}`,padding:hLeads.length>0?"8px 10px":"0",display:"flex",flexDirection:"column",gap:6}}>
