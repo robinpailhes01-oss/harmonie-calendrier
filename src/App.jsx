@@ -5,12 +5,12 @@ const LAT=43.5283,LON=3.9816;
 const MN=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 const MNC=["Jan","Fév","Mar","Avr","Mai","Jui","Jul","Aoû","Sep","Oct","Nov","Déc"];
 const DL=["L","M","M","J","V","S","D"],DFLS=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
-const TX={nuit_classique:150,nuit_prestige:350,sortie_mer_2h:380,sortie_mer_3h:550,sortie_mer_4h:750};
-const FM={nuit_classique:{c:"#007AFF",l:"Classique",i:"🌙"},nuit_prestige:{c:"#AF52DE",l:"Prestige",i:"✨"},sortie_mer_2h:{c:"#30D158",l:"Sortie 2h",i:"⛵"},sortie_mer_3h:{c:"#34C759",l:"Sortie 3h",i:"⛵"},sortie_mer_4h:{c:"#28BD4F",l:"Sortie 4h",i:"⛵"}};
-const TYPES=[{v:"nuit_classique",l:"Nuit Classique 150€"},{v:"nuit_prestige",l:"Nuit Prestige 350€"},{v:"sortie_mer_2h",l:"Sortie 2h 380€"},{v:"sortie_mer_3h",l:"Sortie 3h 550€"},{v:"sortie_mer_4h",l:"Sortie 4h 750€"}];
+const TX={nuit_classique:180,nuit_prestige:350,nuit_signature:750,sortie_mer_2h:380,sortie_mer_3h:550,sortie_mer_4h:750};
+const FM={nuit_classique:{c:"#007AFF",l:"Essentielle",i:"🌙"},nuit_prestige:{c:"#AF52DE",l:"Prestige",i:"✨"},nuit_signature:{c:"#C9A96E",l:"Signature",i:"👑"},sortie_mer_2h:{c:"#30D158",l:"Sortie 2h",i:"⛵"},sortie_mer_3h:{c:"#34C759",l:"Sortie 3h",i:"⛵"},sortie_mer_4h:{c:"#28BD4F",l:"Sortie 4h",i:"⛵"}};
+const TYPES=[{v:"nuit_classique",l:"Essentielle 180€"},{v:"nuit_prestige",l:"Prestige 350€"},{v:"nuit_signature",l:"Signature 750€"},{v:"sortie_mer_2h",l:"Sortie 2h 380€"},{v:"sortie_mer_3h",l:"Sortie 3h 550€"},{v:"sortie_mer_4h",l:"Sortie 4h 750€"}];
 const STATUTS=[{v:"nouveau",l:"Nouveau"},{v:"en_conversation",l:"En conversation"},{v:"qualifie",l:"Qualifié"},{v:"reserve",l:"Réservé"},{v:"termine",l:"Terminé"},{v:"perdu",l:"Perdu"}];
 const TEMPS=[{v:"chaud",l:"Chaud"},{v:"tiede",l:"Tiède"},{v:"froid",l:"Froid"}];
-const DT={nuit_classique:[17,12],nuit_prestige:[17,12],sortie_mer_2h:[10,12],sortie_mer_3h:[10,13],sortie_mer_4h:[10,14]};
+const DT={nuit_classique:[17,12],nuit_prestige:[17,12],nuit_signature:[17,12],sortie_mer_2h:[10,12],sortie_mer_3h:[10,13],sortie_mer_4h:[10,14]};
 // Heure d'affichage dans la vue jour (heure de début pour ce jour)
 const getDTForDay=(l,isNextDay)=>{
   if(isNuit(l.type_interet)){
@@ -207,7 +207,7 @@ export default function App(){
     return sortLeads(base);
   },[allLeads,tab]);
   const weekDays=useMemo(()=>{const days=[];for(let i=0;i<7;i++){const d=new Date(weekStart);d.setDate(weekStart.getDate()+i);days.push(d);}return days;},[weekStart]);
-  const isNuit=t=>t==="nuit_classique"||t==="nuit_prestige";
+  const isNuit=t=>t==="nuit_classique"||t==="nuit_prestige"||t==="nuit_signature";
   const leadsForDate=d=>sortLeads(datedLeads.filter(l=>l.pd&&sameDay(l.pd,d)));
 
   const goBack=()=>{if(view==="month")setCur(new Date(yr,mo-1,1));else if(view==="week"){const d=new Date(weekStart);d.setDate(d.getDate()-7);setWeekStart(new Date(d));}else{const d=new Date(dayView);d.setDate(d.getDate()-1);setDayView(new Date(d));}setSel(null);};
