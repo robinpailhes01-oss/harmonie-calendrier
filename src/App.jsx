@@ -385,44 +385,52 @@ export default function App(){
           })}
         </div>}
 
-        {/* Timeline Google Calendar style */}
+        {/* Timeline Google Calendar style — position absolute comme GCal */}
         <div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:12,overflow:"hidden"}}>
           {dl.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:c.tx3}}>
             <div style={{fontSize:24,marginBottom:6}}>📅</div>
             <div style={{fontSize:13,fontWeight:600,color:c.tx2}}>Journée libre</div>
             {isG(w)&&<div style={{fontSize:11,color:c.gn,marginTop:4}}>Conditions parfaites</div>}
           </div>}
-          {HOURS.map((h,hi)=>{
-            // Leads qui commencent à cette demi-heure exacte
-            const hLeads=dl.filter(l=>getH(l)===h);
-            const isNow=isToday(dayView)&&(now.getHours()+(now.getMinutes()>=30?0.5:0))===h;
-            const isEmpty=hLeads.length===0&&!isNow;
-            const SLOT=30; // px par slot de 30min
-            return(
-              <div key={h} style={{display:"flex",borderBottom:hi<HOURS.length-1?`0.5px solid ${c.bd}15`:"none",minHeight:isEmpty?SLOT:hLeads.length>0?Math.max(SLOT*2,SLOT):SLOT,background:isNow?`${c.ac}04`:"transparent",position:"relative"}}>
-                {/* Heure */}
-                <div style={{width:48,padding:"6px 8px 0",fontSize:9,color:isNow?c.ac:c.tx3,fontWeight:isNow?600:400,textAlign:"right",flexShrink:0,letterSpacing:"-0.02em"}}>
-                  {h%1===0?Math.floor(h)+"h":""}
-                  {isNow&&<div style={{width:6,height:6,borderRadius:"50%",background:c.ac,margin:"3px auto 0"}}/>}
+          {/* Grille de fond — slots de 30min fixes */}
+          <div style={{position:"relative"}}>
+            {/* Lignes de la grille */}
+            {HOURS.map((h,hi)=>{
+              const isNow=isToday(dayView)&&(now.getHours()+(now.getMinutes()>=30?0.5:0))===h;
+              return(
+                <div key={h} style={{display:"flex",height:32,borderBottom:`0.5px solid ${c.bd}${h%1===0?"25":"10"}`,background:isNow?`${c.ac}04`:"transparent"}}>
+                  <div style={{width:48,paddingRight:8,paddingTop:4,fontSize:9,color:isNow?c.ac:c.tx3,fontWeight:isNow?600:400,textAlign:"right",flexShrink:0}}>
+                    {h%1===0?Math.floor(h)+"h":""}
+                  </div>
+                  <div style={{flex:1,borderLeft:`0.5px solid ${isNow?c.ac+"60":c.bd+"20"}`,position:"relative"}}>
+                    {isNow&&<div style={{position:"absolute",top:0,left:0,right:0,height:2,background:c.ac,zIndex:3}}/>}
+                  </div>
                 </div>
-                {/* Contenu */}
-                <div style={{flex:1,borderLeft:`0.5px solid ${isNow?c.ac+"50":c.bd+"20"}`,padding:hLeads.length>0?"8px 10px":"0",display:"flex",flexDirection:"column",gap:6}}>
-                  {hLeads.map((l,li)=>{
-                    const lcol=lc(l);
-                    const fm=FM[l.type_interet]||{c:c.tx3,l:"?",i:"👤"};
-                    const prix=parseFloat(l.prix_custom||0)||TX[l.type_interet]||0;
-                    const acompte=parseFloat(l.acompte_recu||0);
-                    const restant=prix-acompte;
-                    const heureLabel=getHeureLabel(l);
-                    // Calcul hauteur selon durée réelle
-                    const parseHDec=s=>{if(!s)return null;const p=s.split(":");return parseInt(p[0])+(parseInt(p[1]||"0")>=30?0.5:0);};
-                    const hDebut=parseHDec(l.heure_debut)||(DT[l.type_interet]?.[0]||h);
-                    const hFinDefault=isNuit(l.type_interet)?null:(DT[l.type_interet]?.[1]||hDebut+2);
-                    const hFin=parseHDec(l.heure_fin)||hFinDefault;
-                    const dureeSlots=hFin?Math.max(2,Math.round((hFin-hDebut)*2)):4; // nb de slots 30min
-                    const cardH=dureeSlots*30-4; // px
-                    return(
-                      <div key={li} onClick={()=>setEdit(l)} style={{background:`${lcol}0D`,border:`0.5px solid ${lcol}35`,borderLeft:`3px solid ${lcol}`,borderRadius:10,padding:"10px 14px",cursor:"pointer",minHeight:cardH,boxSizing:"border-box"}}>
+              );
+            })}
+            {/* Cartes positionnées en absolu comme Google Calendar */}
+            <div style={{position:"absolute",top:0,left:48,right:0,bottom:0,pointerEvents:"none"}}>
+              {dl.map((l,li)=>{
+                const lcol=lc(l);
+                const fm=FM[l.type_interet]||{c:c.tx3,l:"?",i:"👤"};
+                const prix=parseFloat(l.prix_custom||0)||TX[l.type_interet]||0;
+                const acompte=parseFloat(l.acompte_recu||0);
+                const restant=prix-acompte;
+                const heureLabel=getHeureLabel(l);
+                const SLOT_H=32; // px par slot 30min — doit correspondre à height:32 ci-dessus
+                const H_START=7; // heure de début de la grille
+                const parseHDec=s=>{if(!s)return null;const p=s.split(":");return parseInt(p[0])+(parseInt(p[1]||"0")>=30?0.5:0);};
+                const hDebut=parseHDec(l.heure_debut)||(DT[l.type_interet]?.[0]||10);
+                const hFinDefault=isNuit(l.type_interet)?(hDebut+19):(DT[l.type_interet]?.[1]||hDebut+2);
+                const hFin=parseHDec(l.heure_fin)||hFinDefault;
+                const topPx=(hDebut-H_START)*SLOT_H*2; // *2 car SLOT_H = 30min
+                const heightPx=Math.max(SLOT_H,(hFin-hDebut)*SLOT_H*2-2);
+                return(
+                  <div key={li} onClick={()=>setEdit(l)}
+                    style={{position:"absolute",left:4,right:4,top:topPx,height:heightPx,
+                      background:`${lcol}18`,border:`0.5px solid ${lcol}50`,borderLeft:`3px solid ${lcol}`,
+                      borderRadius:8,padding:"6px 10px",cursor:"pointer",pointerEvents:"all",
+                      overflow:"hidden",boxSizing:"border-box",zIndex:2}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
                           <div style={{flex:1,minWidth:0}}>
                             {/* Nom + badge */}
