@@ -195,7 +195,14 @@ export default function App(){
   const isToday=d=>d instanceof Date?sameDay(d,now):(d===now.getDate()&&mo===now.getMonth()&&yr===now.getFullYear());
   const wi=code=>{if(code==null)return"";if(code>=61)return"🌧";if(code>=51)return"🌦";if(code>=45)return"🌫";if(code>=3)return"⛅";if(code>=1)return"🌤";return"☀️";};
   const isG=w=>w&&w.code<3&&w.hi>=20&&w.wind<30&&(!w.wave||parseFloat(w.wave)<1);
-  const lc=l=>l.statut==="reserve"?c.gn:l.temperature==="chaud"?c.red:l.temperature==="tiede"?c.or:c.tx3;
+  const lc=l=>{
+  if(l.statut==="reserve")return"#10B981";   // vert émeraude
+  if(l.statut==="termine")return"#6B7280";   // gris
+  if(l.statut==="perdu")return"#6B7280";
+  if(l.temperature==="chaud")return"#EF4444"; // rouge vif
+  if(l.temperature==="tiede")return"#F59E0B"; // orange
+  return"#94A3B8";                             // gris bleu froid
+};
 
   const up=useMemo(()=>datedLeads.filter(l=>l.pd&&l.pd>=new Date(now.getFullYear(),now.getMonth(),now.getDate())).sort((a,b)=>a.pd-b.pd),[datedLeads,now]);
   const profit=fin.rev-fin.dep;
@@ -280,56 +287,108 @@ export default function App(){
   );
 
   // ---- WEEK VIEW ----
-  const WeekView=()=>(
-    <div style={{padding:mob?"0 8px 16px":"0 28px 24px",overflowX:"auto"}}>
-      <div style={{minWidth:mob?580:0}}>
-        <div style={{display:"grid",gridTemplateColumns:`50px repeat(7,1fr)`,borderBottom:`0.5px solid ${c.bd}30`}}>
+  const WeekView=()=>{
+    const SLOT_H=28; // px par demi-heure
+    const H_START=7;
+    const parseHDec=s=>{if(!s)return null;const p=s.split(":");return parseInt(p[0])+(parseInt(p[1]||"0")>=30?0.5:0);};
+    const totalH=HOURS.length*SLOT_H;
+    return(
+    <div style={{padding:mob?"0 4px 16px":"0 28px 24px",overflowX:"auto"}}>
+      <div style={{minWidth:mob?520:0}}>
+        {/* Header jours */}
+        <div style={{display:"grid",gridTemplateColumns:`44px repeat(7,1fr)`,borderBottom:`1px solid ${c.bd}40`,background:c.s,position:"sticky",top:0,zIndex:10}}>
           <div/>
           {weekDays.map((d,i)=>{
-            const td=isToday(d);const dl=leadsForDate(d);const w=wxForDate(d);
+            const td=isToday(d);
+            const dl=leadsForDate(d);
+            const hasResa=dl.some(l=>l.statut==="reserve");
+            const hasChaud=dl.some(l=>l.temperature==="chaud"&&l.statut!=="reserve");
+            const w=wxForDate(d);
             return(
-              <div key={i} onClick={()=>openDay(d)} style={{textAlign:"center",padding:"8px 4px 6px",cursor:"pointer",borderLeft:`0.5px solid ${c.bd}25`,background:td?`${c.ac}08`:"transparent"}}>
-                <div style={{fontSize:10,color:c.tx3,fontWeight:500,letterSpacing:"0.04em",textTransform:"uppercase"}}>{DFLS[i]}</div>
-                <div style={{width:30,height:30,borderRadius:"50%",background:td?c.ac:"transparent",color:td?"#fff":c.tx,fontSize:15,fontWeight:700,margin:"4px auto 2px",display:"flex",alignItems:"center",justifyContent:"center"}}>{d.getDate()}</div>
-                {w&&<div style={{fontSize:9,color:c.tx3}}>{wi(w.code)}{w.hi}°</div>}
-                {dl.length>0&&<div style={{fontSize:9,color:dl.some(l=>l.statut==="reserve")?c.gn:c.tx3}}>{dl.length} rdv</div>}
+              <div key={i} onClick={()=>openDay(d)} style={{textAlign:"center",padding:"6px 2px 4px",cursor:"pointer",borderLeft:`0.5px solid ${c.bd}20`,background:td?`${c.ac}06`:"transparent"}}>
+                <div style={{fontSize:9,color:c.tx3,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase"}}>{DFLS[i]}</div>
+                <div style={{width:28,height:28,borderRadius:"50%",background:td?c.ac:"transparent",color:td?"#fff":c.tx,fontSize:14,fontWeight:700,margin:"3px auto 1px",display:"flex",alignItems:"center",justifyContent:"center"}}>{d.getDate()}</div>
+                {w&&<div style={{fontSize:8,color:c.tx3,marginBottom:1}}>{wi(w.code)}{w.hi}°</div>}
+                {/* Indicateurs leads */}
+                {dl.length>0&&<div style={{display:"flex",justifyContent:"center",gap:2,marginBottom:2}}>
+                  {hasResa&&<div style={{width:6,height:6,borderRadius:"50%",background:"#10B981"}}/>}
+                  {hasChaud&&<div style={{width:6,height:6,borderRadius:"50%",background:"#EF4444"}}/>}
+                  {!hasResa&&!hasChaud&&dl.length>0&&<div style={{width:6,height:6,borderRadius:"50%",background:"#F59E0B"}}/>}
+                </div>}
               </div>
             );
           })}
         </div>
-        <div style={{border:`0.5px solid ${c.bd}25`,borderTop:"none",borderRadius:"0 0 12px 12px",overflow:"hidden"}}>
-          {HOURS.map((h,hi)=>(
-            <div key={h} style={{display:"grid",gridTemplateColumns:"50px repeat(7,1fr)",borderBottom:hi<HOURS.length-1?`0.5px solid ${c.bd}18`:"none",minHeight:28}}>
-              <div style={{fontSize:9,color:c.tx3,padding:"4px 6px 0",fontWeight:500,textAlign:"right",borderRight:`0.5px solid ${c.bd}25`,flexShrink:0}}>{h%1===0?Math.floor(h)+"h":""}</div>
-              {weekDays.map((d,di)=>{
-                const hLeads=leadsForDate(d).filter(l=>{
-                  const lh=l.heure_debut?(()=>{const p=l.heure_debut.split(":");return parseInt(p[0])+(parseInt(p[1]||"0")>=30?0.5:0);})():(DT[l.type_interet]?.[0]||null);
-                  return lh!==null&&lh===h;
-                });
-                const isNow=isToday(d)&&now.getHours()===h;
-                return(
-                  <div key={di} style={{borderLeft:`0.5px solid ${c.bd}18`,padding:"3px 3px",position:"relative",background:isNow?`${c.ac}06`:"transparent"}}>
-                    {isNow&&<div style={{position:"absolute",top:0,left:0,right:0,height:1.5,background:c.ac,zIndex:2}}/>}
-                    {hLeads.map((l,li)=>{
-                      const lcol=lc(l);const fm=FM[l.type_interet]||{i:"👤",l:"—"};const dt=DT[l.type_interet]||[h,h+2];
-                      return(
-                        <div key={li} onClick={e=>{e.stopPropagation();setEdit(l);}}
-                          style={{background:`${lcol}18`,border:`0.5px solid ${lcol}50`,borderLeft:`2.5px solid ${lcol}`,borderRadius:5,padding:"3px 5px",cursor:"pointer",marginBottom:2,minHeight:44,overflow:"hidden"}}>
-                          <div style={{fontSize:10,fontWeight:700,color:lcol,lineHeight:"14px"}}>{l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}{l.statut==="reserve"?" ✓":""}</div>
-                          <div style={{fontSize:9,color:lcol,opacity:0.75}}>{fm.i} {dt[0]}h→{dt[1]}h</div>
-                          {l.acompte_recu>0&&<div style={{fontSize:8,color:c.gn}}>+{l.acompte_recu}€</div>}
+        {/* Grille + cartes */}
+        <div style={{border:`0.5px solid ${c.bd}20`,borderTop:"none",borderRadius:"0 0 12px 12px",overflow:"hidden",position:"relative"}}>
+          <div style={{display:"grid",gridTemplateColumns:`44px repeat(7,1fr)`,height:totalH}}>
+            {/* Colonne heures */}
+            <div style={{borderRight:`0.5px solid ${c.bd}20`}}>
+              {HOURS.map((h,hi)=>(
+                <div key={h} style={{height:SLOT_H,display:"flex",alignItems:"flex-start",justifyContent:"flex-end",paddingRight:6,paddingTop:3,borderBottom:h%1===0?`0.5px solid ${c.bd}20`:`0.5px solid ${c.bd}08`}}>
+                  <span style={{fontSize:8,color:c.tx3,fontWeight:h%1===0?500:300}}>{h%1===0?Math.floor(h)+"h":""}</span>
+                </div>
+              ))}
+            </div>
+            {/* 7 colonnes jours — grille */}
+            {weekDays.map((d,di)=>{
+              const isNowLine=isToday(d);
+              const nowDec=now.getHours()+(now.getMinutes()>=30?0.5:0);
+              const nowTop=(nowDec-H_START)*SLOT_H*2;
+              return(
+                <div key={di} onClick={()=>openDay(d)} style={{borderLeft:`0.5px solid ${c.bd}15`,position:"relative",cursor:"pointer",background:isToday(d)?`${c.ac}03`:"transparent"}}>
+                  {/* Lignes de grille */}
+                  {HOURS.map((h,hi)=>(
+                    <div key={h} style={{position:"absolute",top:hi*SLOT_H,left:0,right:0,height:SLOT_H,borderBottom:h%1===0?`0.5px solid ${c.bd}20`:`0.5px solid ${c.bd}06`}}/>
+                  ))}
+                  {/* Ligne heure actuelle */}
+                  {isNowLine&&<div style={{position:"absolute",top:nowTop,left:0,right:0,height:2,background:c.ac,zIndex:5,boxShadow:`0 0 4px ${c.ac}`}}/>}
+                  {/* Cartes leads */}
+                  {leadsForDate(d).map((l,li)=>{
+                    const lcol=lc(l);
+                    const fm=FM[l.type_interet]||{i:"?",l:"?"};
+                    const hDebut=parseHDec(l.heure_debut)||(DT[l.type_interet]?.[0]||10);
+                    const hFinDefault=isNuit(l.type_interet)?(hDebut+2):(DT[l.type_interet]?.[1]||hDebut+2);
+                    const hFin=parseHDec(l.heure_fin)||hFinDefault;
+                    const topPx=(hDebut-H_START)*SLOT_H*2;
+                    const heightPx=Math.max(SLOT_H*2,(hFin-hDebut)*SLOT_H*2-2);
+                    const prix=parseFloat(l.prix_custom||0)||TX[l.type_interet]||0;
+                    const acompte=parseFloat(l.acompte_recu||0);
+                    return(
+                      <div key={li} onClick={e=>{e.stopPropagation();setEdit(l);}}
+                        style={{position:"absolute",left:2,right:2,top:topPx,height:heightPx,
+                          background:`${lcol}15`,border:`0.5px solid ${lcol}40`,borderLeft:`3px solid ${lcol}`,
+                          borderRadius:6,padding:"4px 6px",cursor:"pointer",zIndex:4,overflow:"hidden",
+                          boxSizing:"border-box"}}>
+                        <div style={{fontSize:10,fontWeight:700,color:lcol,lineHeight:"13px",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>
+                          {l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}
+                          {l.statut==="reserve"&&<span style={{marginLeft:3,fontSize:8,fontWeight:600,color:"#10B981"}}>✓</span>}
                         </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
+                        {heightPx>=42&&<div style={{fontSize:8,color:lcol,opacity:0.8,marginTop:1,overflow:"hidden",whiteSpace:"nowrap"}}>
+                          {fm.i} {l.heure_debut||DT[l.type_interet]?.[0]+"h"}→{l.heure_fin||(isNuit(l.type_interet)?"12h J+1":DT[l.type_interet]?.[1]+"h")}
+                        </div>}
+                        {heightPx>=56&&acompte>0&&<div style={{fontSize:8,color:"#10B981",fontWeight:600,marginTop:1}}>+{acompte}€</div>}
+                        {heightPx>=56&&prix>0&&acompte<prix&&<div style={{fontSize:8,color:"#F59E0B",fontWeight:600}}>⏳{prix-acompte}€</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        {/* Légende */}
+        <div style={{display:"flex",gap:12,marginTop:10,paddingLeft:4,flexWrap:"wrap"}}>
+          {[{col:"#10B981",l:"Réservé"},{col:"#EF4444",l:"Chaud"},{col:"#F59E0B",l:"Tiède"},{col:"#94A3B8",l:"Froid"}].map((x,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:4}}>
+              <div style={{width:10,height:10,borderRadius:2,background:x.col}}/>
+              <span style={{fontSize:10,color:c.tx3}}>{x.l}</span>
             </div>
           ))}
         </div>
       </div>
     </div>
-  );
+  );};
 
   // ---- DAY VIEW ----
   const DayView=()=>{
