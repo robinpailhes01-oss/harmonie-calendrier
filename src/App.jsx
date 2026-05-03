@@ -130,11 +130,14 @@ export default function App(){
     const potentiel=datedLeads.filter(l=>l.statut!=="reserve").reduce((s,l)=>s+prixEffectif(l),0);
     // CA global = tout ce qui a été encaissé (acomptes + soldés)
     const caGlobal=allLeads.reduce((s,l)=>s+parseFloat(l.montant_total_encaisse||l.acompte_recu||0),0);
-    // CA mois en cours
+    // CA mois en cours = argent réellement encaissé ce mois
     const moisCourant=new Date().toISOString().substring(0,7);
     const caMoisEnCours=allLeads.filter(l=>{
-      const d=l.date_solde||l.updated_at||l.created_at||"";
-      return d.substring(0,7)===moisCourant;
+      // Soldé ce mois : date_solde dans le mois courant
+      if(l.date_solde&&l.date_solde.substring(0,7)===moisCourant) return true;
+      // Acompte reçu ce mois : lead créé ce mois avec acompte > 0
+      if(parseFloat(l.acompte_recu||0)>0&&(l.created_at||"").substring(0,7)===moisCourant) return true;
+      return false;
     }).reduce((s,l)=>s+parseFloat(l.montant_total_encaisse||l.acompte_recu||0),0);
     // Nb résas mois en cours
     const resasMois=reserves.filter(l=>{
