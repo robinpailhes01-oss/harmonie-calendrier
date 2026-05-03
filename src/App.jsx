@@ -7,6 +7,15 @@ const MNC=["Jan","Fév","Mar","Avr","Mai","Jui","Jul","Aoû","Sep","Oct","Nov","
 const DL=["L","M","M","J","V","S","D"],DFLS=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
 const TX={nuit_classique:180,nuit_prestige:350,nuit_signature:750,sortie_mer_2h:380,sortie_mer_3h:550,sortie_mer_4h:750};
 const FM={nuit_classique:{c:"#007AFF",l:"Essentielle",i:"🌙"},nuit_prestige:{c:"#AF52DE",l:"Prestige",i:"✨"},nuit_signature:{c:"#C9A96E",l:"Signature",i:"👑"},sortie_mer_2h:{c:"#30D158",l:"Sortie 2h",i:"⛵"},sortie_mer_3h:{c:"#34C759",l:"Sortie 3h",i:"⛵"},sortie_mer_4h:{c:"#28BD4F",l:"Sortie 4h",i:"⛵"}};
+const SOURCES=[
+  {v:"instagram_dm",l:"Instagram DM"},
+  {v:"site_web",l:"Site web"},
+  {v:"whatsapp",l:"WhatsApp"},
+  {v:"telephone",l:"Téléphone"},
+  {v:"recommandation",l:"Recommandation"},
+  {v:"manuel",l:"Manuel"},
+  {v:"autre",l:"Autre"},
+];
 const TYPES=[{v:"nuit_classique",l:"Essentielle 180€"},{v:"nuit_prestige",l:"Prestige 350€"},{v:"nuit_signature",l:"Signature 750€"},{v:"sortie_mer_2h",l:"Sortie 2h 380€"},{v:"sortie_mer_3h",l:"Sortie 3h 550€"},{v:"sortie_mer_4h",l:"Sortie 4h 750€"}];
 const STATUTS=[{v:"nouveau",l:"Nouveau"},{v:"en_conversation",l:"En conversation"},{v:"qualifie",l:"Qualifié"},{v:"reserve",l:"Réservé"},{v:"termine",l:"Terminé"},{v:"perdu",l:"Perdu"}];
 const TEMPS=[{v:"chaud",l:"Chaud"},{v:"tiede",l:"Tiède"},{v:"froid",l:"Froid"}];
@@ -215,6 +224,8 @@ export default function App(){
   },[allLeads,tab]);
   const weekDays=useMemo(()=>{const days=[];for(let i=0;i<7;i++){const d=new Date(weekStart);d.setDate(weekStart.getDate()+i);days.push(d);}return days;},[weekStart]);
   const isNuit=t=>t==="nuit_classique"||t==="nuit_prestige"||t==="nuit_signature";
+const srcIcon=s=>({instagram_dm:"📸",site_web:"🌐",whatsapp:"💬",telephone:"📞",recommandation:"⭐",manuel:"✏️"})[s]||"📋";
+const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"WhatsApp",telephone:"Tél",recommandation:"Reco",manuel:"Manuel"})[s]||s||"?";
   const leadsForDate=d=>sortLeads(datedLeads.filter(l=>l.pd&&sameDay(l.pd,d)));
 
   const goBack=()=>{if(view==="month")setCur(new Date(yr,mo-1,1));else if(view==="week"){const d=new Date(weekStart);d.setDate(d.getDate()-7);setWeekStart(new Date(d));}else{const d=new Date(dayView);d.setDate(d.getDate()-1);setDayView(new Date(d));}setSel(null);};
@@ -503,6 +514,7 @@ export default function App(){
                             <div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>
                               {l.telephone&&<span style={{fontSize:10,color:c.gn}}>📱 {l.telephone}</span>}
                               {l.email&&<span style={{fontSize:10,color:c.tx3}}>✉ {l.email}</span>}
+                              {l.source&&<span style={{fontSize:10,color:c.tx3}}>{srcIcon(l.source)} {srcLabel(l.source)}</span>}
                               {l.nombre_personnes&&<span style={{fontSize:10,color:c.tx3}}>👥 {l.nombre_personnes} pers.</span>}
                             </div>
                             {/* Notes */}
@@ -676,6 +688,7 @@ export default function App(){
                       <span>{fm.l}</span>
                       {l.date_souhaitee&&<span>· 📅 {l.date_souhaitee}</span>}
                       {l.occasion&&<span>· {l.occasion}</span>}
+                      {l.source&&l.source!=="manuel"&&<span style={{background:c.s2,borderRadius:4,padding:"1px 5px",fontSize:9,color:c.tx3}}>{srcIcon(l.source)} {srcLabel(l.source)}</span>}
                       {l.telephone&&<span style={{color:c.gn}}>· 📱</span>}
                       {ago!==null&&<span style={{marginLeft:"auto"}}>{ago===0?"Auj.":ago===1?"Hier":`${ago}j`}</span>}
                     </div>
@@ -731,7 +744,7 @@ function EditForm({lead,onSave,onDelete,onSolde,saving,c,inputStyle,labelStyle})
   const[f,setF]=useState({
     prenom:lead.prenom||"",email:lead.email||"",telephone:lead.telephone||"",
     type_interet:lead.type_interet||"",date_souhaitee:lead.date_souhaitee||"",
-    occasion:lead.occasion||"",nombre_personnes:lead.nombre_personnes||"",
+    source:lead.source||"manuel",occasion:lead.occasion||"",nombre_personnes:lead.nombre_personnes||"",
     statut:lead.statut||"nouveau",temperature:lead.temperature||"froid",
     score:lead.score||0,notes:lead.notes||"",
     acompte_recu:lead.acompte_recu||"",
@@ -764,6 +777,12 @@ function EditForm({lead,onSave,onDelete,onSolde,saving,c,inputStyle,labelStyle})
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <div><label style={labelStyle}>Heure début</label><input type="time" value={f.heure_debut} onChange={e=>upd("heure_debut",e.target.value)} style={inputStyle} placeholder="ex: 10:00"/></div>
         <div><label style={labelStyle}>Heure fin</label><input type="time" value={f.heure_fin} onChange={e=>upd("heure_fin",e.target.value)} style={inputStyle} placeholder="ex: 13:00"/></div>
+      </div>
+      <div>
+        <label style={labelStyle}>Provenance</label>
+        <select value={f.source} onChange={e=>upd("source",e.target.value)} style={{...inputStyle,cursor:"pointer"}}>
+          {SOURCES.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
+        </select>
       </div>
       <div><label style={labelStyle}>Occasion</label><input value={f.occasion} onChange={e=>upd("occasion",e.target.value)} style={inputStyle}/></div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -848,7 +867,7 @@ function EditForm({lead,onSave,onDelete,onSolde,saving,c,inputStyle,labelStyle})
 }
 
 function CreateForm({onSave,saving,c,inputStyle,labelStyle}){
-  const[f,setF]=useState({prenom:"",email:"",telephone:"",type_interet:"",date_souhaitee:"",heure_debut:"",heure_fin:"",occasion:"",nombre_personnes:"",statut:"nouveau",temperature:"tiede",score:50,notes:"",acompte_recu:""});
+  const[f,setF]=useState({prenom:"",email:"",telephone:"",type_interet:"",date_souhaitee:"",heure_debut:"",heure_fin:"",source:"manuel",occasion:"",nombre_personnes:"",statut:"nouveau",temperature:"tiede",score:50,notes:"",acompte_recu:""});
   const upd=(k,v)=>setF({...f,[k]:v});
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -865,6 +884,12 @@ function CreateForm({onSave,saving,c,inputStyle,labelStyle}){
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <div><label style={labelStyle}>Heure début</label><input type="time" value={f.heure_debut} onChange={e=>upd("heure_debut",e.target.value)} style={inputStyle}/></div>
         <div><label style={labelStyle}>Heure fin</label><input type="time" value={f.heure_fin} onChange={e=>upd("heure_fin",e.target.value)} style={inputStyle}/></div>
+      </div>
+      <div>
+        <label style={labelStyle}>Provenance</label>
+        <select value={f.source} onChange={e=>upd("source",e.target.value)} style={{...inputStyle,cursor:"pointer"}}>
+          {SOURCES.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
+        </select>
       </div>
       <div><label style={labelStyle}>Occasion</label><input value={f.occasion} onChange={e=>upd("occasion",e.target.value)} placeholder="anniversaire, EVJF..." style={inputStyle}/></div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
