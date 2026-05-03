@@ -124,15 +124,28 @@ export default function App(){
   // Financial calculations — réactif à chaque sauvegarde via allLeads
   const finCalc=useMemo(()=>{
     const reserves=allLeads.filter(l=>l.statut==="reserve");
-    // Encaissé = somme des acomptes reçus sur toutes les réservations
     const encaisse=reserves.reduce((s,l)=>s+parseFloat(l.acompte_recu||0),0);
-    // Total résas = prix effectif (custom ou catalogue) de chaque résa
     const totalReserve=reserves.reduce((s,l)=>s+prixEffectif(l),0);
-    // Restant = ce qu'il reste à encaisser sur les résas
     const restant=totalReserve-encaisse;
-    // Pipeline = prix effectif des leads datés non encore réservés
     const potentiel=datedLeads.filter(l=>l.statut!=="reserve").reduce((s,l)=>s+prixEffectif(l),0);
-    return{encaisse,restant,totalReserve,potentiel,nReserves:reserves.length};
+    // CA global = tout ce qui a été encaissé (acomptes + soldés)
+    const caGlobal=allLeads.reduce((s,l)=>s+parseFloat(l.montant_total_encaisse||l.acompte_recu||0),0);
+    // CA mois en cours
+    const moisCourant=new Date().toISOString().substring(0,7);
+    const caMoisEnCours=allLeads.filter(l=>{
+      const d=l.date_solde||l.updated_at||l.created_at||"";
+      return d.substring(0,7)===moisCourant;
+    }).reduce((s,l)=>s+parseFloat(l.montant_total_encaisse||l.acompte_recu||0),0);
+    // Nb résas mois en cours
+    const resasMois=reserves.filter(l=>{
+      const d=l.date_souhaitee||"";
+      // Check si la date souhaitée est dans le mois courant
+      try{
+        const pd=new Date(l.pd||0);
+        return pd.getFullYear()===new Date().getFullYear()&&pd.getMonth()===new Date().getMonth();
+      }catch(e){return false;}
+    }).length;
+    return{encaisse,restant,totalReserve,potentiel,nReserves:reserves.length,caGlobal,caMoisEnCours,resasMois};
   },[allLeads,datedLeads]);
 
   const saveLead=async(updates)=>{
@@ -930,6 +943,22 @@ function FinancesView({c,mob,depenses,fin,allLeads,newDep,setNewDep,addDepense,d
 
   return(
     <div style={{padding:mob?"0 12px 32px":"0 28px 40px"}}>
+
+      {/* KPIs CA — en haut */}
+      <div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"repeat(4,1fr)",gap:10,marginBottom:16}}>
+        {[
+          {l:"CA Global",v:(finCalc.caGlobal||0).toFixed(0)+"€",sub:"Total encaissé",cl:"#10B981",icon:"💰"},
+          {l:"CA " + new Date().toLocaleDateString("fr-FR",{month:"long"}),v:(finCalc.caMoisEnCours||0).toFixed(0)+"€",sub:"Ce mois-ci",cl:"#007AFF",icon:"📅"},
+          {l:"Résultat net",v:((finCalc.caGlobal||0)-totalDep>=0?"+":"")+((finCalc.caGlobal||0)-totalDep).toFixed(0)+"€",sub:(finCalc.caGlobal||0)-totalDep>=0?"Bénéfice":"Déficit",cl:(finCalc.caGlobal||0)-totalDep>=0?"#10B981":"#EF4444",icon:"📊"},
+          {l:"Pipeline",v:(finCalc.potentiel||0).toFixed(0)+"€",sub:(finCalc.nReserves||0)+" résas confirmées",cl:"#F59E0B",icon:"🔥"},
+        ].map((k,i)=>(
+          <div key={i} style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:14,padding:"14px 16px"}}>
+            <div style={{fontSize:10,color:c.tx3,fontWeight:500,marginBottom:4}}>{k.icon} {k.l}</div>
+            <div style={{fontSize:mob?20:26,fontWeight:700,letterSpacing:"-0.04em",color:k.cl}}>{k.v}</div>
+            <div style={{fontSize:10,color:c.tx3,marginTop:2}}>{k.sub}</div>
+          </div>
+        ))}
+      </div>
 
       {/* FORMULAIRE RAPIDE — au top, ultra compact */}
       <div style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:16,padding:mob?"14px":"16px 20px",marginBottom:16}}>
