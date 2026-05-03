@@ -598,12 +598,12 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
 
         {/* KPI STRIP — 3 rows on mobile, scrollable */}
         <div style={{borderTop:`0.5px solid ${c.bd}`,overflowX:"auto"}}>
-          {/* Row 1: P&L */}
+          {/* Row 1: CA Global + CA Mois + Dépenses + Leads */}
           <div style={{display:"flex"}}>
             {[
-              {l:"Revenus",v:`${fmt(fin.rev)}`,s:`${fin.nR} op.`,cl:c.gn},
+              {l:"CA Global",v:`${fmt(finCalc.caGlobal)}`,s:"Total encaissé",cl:c.gn},
+              {l:"CA "+new Date().toLocaleDateString("fr-FR",{month:"short"}),v:`${fmt(finCalc.caMoisEnCours)}`,s:"Ce mois",cl:"#007AFF"},
               {l:"Dépenses",v:`${fmt(fin.dep)}`,s:`${fin.nD} op.`,cl:c.red},
-              {l:"Résultat",v:`${profit>=0?"+":""}${fmt(profit)}`,s:profit>=0?"Positif":"Déficit",cl:profit>=0?c.gn:c.red},
             ].map((k,i)=>(
               <div key={i} style={{flex:1,padding:mob?"7px 10px":"9px 16px",borderRight:`0.5px solid ${c.bd}`,minWidth:mob?80:0}}>
                 <div style={{fontSize:mob?8:9,color:c.tx3,fontWeight:500}}>{k.l}</div>
@@ -949,7 +949,7 @@ function FinancesView({c,mob,depenses,fin,allLeads,newDep,setNewDep,addDepense,d
         {[
           {l:"CA Global",v:(finCalc.caGlobal||0).toFixed(0)+"€",sub:"Total encaissé",cl:"#10B981",icon:"💰"},
           {l:"CA " + new Date().toLocaleDateString("fr-FR",{month:"long"}),v:(finCalc.caMoisEnCours||0).toFixed(0)+"€",sub:"Ce mois-ci",cl:"#007AFF",icon:"📅"},
-          {l:"Résultat net",v:((finCalc.caGlobal||0)-totalDep>=0?"+":"")+((finCalc.caGlobal||0)-totalDep).toFixed(0)+"€",sub:(finCalc.caGlobal||0)-totalDep>=0?"Bénéfice":"Déficit",cl:(finCalc.caGlobal||0)-totalDep>=0?"#10B981":"#EF4444",icon:"📊"},
+          {l:"Résultat net",v:(()=>{const td=depenses.reduce((s,d)=>s+parseFloat(d.montant||0),0);const r=(finCalc.caGlobal||0)-td;return(r>=0?"+":"")+r.toFixed(0)+"€";})(),sub:(()=>{const td=depenses.reduce((s,d)=>s+parseFloat(d.montant||0),0);return (finCalc.caGlobal||0)-td>=0?"Bénéfice":"Déficit";})(),cl:(()=>{const td=depenses.reduce((s,d)=>s+parseFloat(d.montant||0),0);return (finCalc.caGlobal||0)-td>=0?"#10B981":"#EF4444";})(),icon:"📊"},
           {l:"Pipeline",v:(finCalc.potentiel||0).toFixed(0)+"€",sub:(finCalc.nReserves||0)+" résas confirmées",cl:"#F59E0B",icon:"🔥"},
         ].map((k,i)=>(
           <div key={i} style={{background:c.s,border:`0.5px solid ${c.bd}`,borderRadius:14,padding:"14px 16px"}}>
