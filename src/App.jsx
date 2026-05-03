@@ -169,7 +169,36 @@ export default function App(){
     setSaving(false);
   };
   const createLead=async(data)=>{setSaving(true);try{const cl={...data};cl.instagram_username=cl.instagram_username||("manuel_"+Date.now());cl.source=cl.source||"manuel";cl.statut=cl.statut||"nouveau";cl.temperature=cl.temperature||"tiede";cl.score=cl.score||50;cl.nombre_messages=0;const r=await fetch(`${SB}/rest/v1/leads`,{method:"POST",headers:{apikey:SK,Authorization:`Bearer ${SK}`,"Content-Type":"application/json","Prefer":"return=minimal"},body:JSON.stringify(cl)});if(!r.ok)throw new Error(await r.text());await load();setCreating(false);}catch(e){alert("Erreur: "+e.message);}setSaving(false);};
-  const deleteLead=async(id)=>{if(!confirm("Supprimer ce prospect ?"))return;setSaving(true);try{await fetch(`${SB}/rest/v1/leads?id=eq.${id}`,{method:"DELETE",headers:{apikey:SK,Authorization:`Bearer ${SK}`}});await load();setEdit(null);}catch(e){}setSaving(false);};
+  const deleteLead=async(id)=>{
+    if(!confirm("Supprimer ce prospect ?"))return;
+    setSaving(true);
+    try{
+      // Récupérer le lead pour extraire le gcal_id dans les notes
+      const leadRes=await fetch(`${SB}/rest/v1/leads?id=eq.${id}&select=notes,prenom`,{headers:{apikey:SK,Authorization:`Bearer ${SK}`}});
+      const leads=await leadRes.json();
+      const lead=leads&&leads[0];
+      // Extraire gcal_id depuis les notes (format: "gcal:xxxxxx")
+      if(lead&&lead.notes){
+        const gcalMatch=lead.notes.match(/gcal:([a-zA-Z0-9_]+)/);
+        if(gcalMatch){
+          const gcalId=gcalMatch[1];
+          // Appel webhook n8n pour supprimer l'event Google Calendar
+          try{
+            await fetch("https://robinplhs.app.n8n.cloud/webhook/delete-gcal-event",{
+              method:"POST",
+              headers:{"Content-Type":"application/json"},
+              body:JSON.stringify({gcal_id:gcalId,lead_id:id,prenom:lead.prenom||""})
+            });
+          }catch(e){console.warn("GCal delete failed:",e);}
+        }
+      }
+      // Supprimer le lead Supabase
+      await fetch(`${SB}/rest/v1/leads?id=eq.${id}`,{method:"DELETE",headers:{apikey:SK,Authorization:`Bearer ${SK}`}});
+      await load();
+      setEdit(null);
+    }catch(e){alert("Erreur: "+e.message);}
+    setSaving(false);
+  };
 
   const marquerSolde=async(leadId,moyen)=>{
     setSaving(true);
