@@ -282,6 +282,13 @@ export default function App(){
   },[allLeads,tab]);
   const weekDays=useMemo(()=>{const days=[];for(let i=0;i<7;i++){const d=new Date(weekStart);d.setDate(weekStart.getDate()+i);days.push(d);}return days;},[weekStart]);
   const isNuit=t=>t==="nuit_classique"||t==="nuit_prestige"||t==="nuit_signature";
+// Nettoyer les placeholders ManyChat non résolus
+const cleanPrenom=p=>{
+  if(!p)return null;
+  if(p.includes("{{")&&p.includes("}}"))return null; // placeholder non résolu
+  if(/^gcal_/.test(p))return null; // lead GCal sans prénom
+  return p.replace(/^\w/,x=>x.toUpperCase());
+};
 const srcIcon=s=>({instagram_dm:"📸",site_web:"🌐",whatsapp:"💬",telephone:"📞",recommandation:"⭐",manuel:"✏️"})[s]||"📋";
 const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"WhatsApp",telephone:"Tél",recommandation:"Reco",manuel:"Manuel"})[s]||s||"?";
   const leadsForDate=d=>sortLeads(datedLeads.filter(l=>l.pd&&sameDay(l.pd,d)));
@@ -302,7 +309,7 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
     return(
       <div onClick={e=>{e.stopPropagation();setEdit(l);}}
         style={{fontSize:compact?9:9,fontWeight:600,padding:compact?"1px 3px 1px 5px":"1px 4px 1px 6px",borderRadius:3,marginBottom:1,background:`${lcol}22`,color:lcol,cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",borderLeft:`2px solid ${lcol}`,lineHeight:"14px"}}>
-        {fm.i} {l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}
+        {fm.i} {(cleanPrenom(l.prenom)||l.instagram_username?.replace(/^gcal_/,"")?.substring(0,12)||"?")}
         {l.statut==="reserve"&&" ✓"}
       </div>
     );
@@ -430,7 +437,7 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
                           borderRadius:6,padding:"4px 6px",cursor:"pointer",zIndex:4,overflow:"hidden",
                           boxSizing:"border-box"}}>
                         <div style={{fontSize:10,fontWeight:700,color:lcol,lineHeight:"13px",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>
-                          {l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}
+                          {(cleanPrenom(l.prenom)||l.instagram_username?.replace(/^gcal_/,"")?.substring(0,12)||"?")}
                           {l.statut==="reserve"&&<span style={{marginLeft:3,fontSize:8,fontWeight:600,color:"#10B981"}}>✓</span>}
                         </div>
                         {heightPx>=42&&<div style={{fontSize:8,color:lcol,opacity:0.8,marginTop:1,overflow:"hidden",whiteSpace:"nowrap"}}>
@@ -505,7 +512,7 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
             return(
               <div key={i} onClick={()=>setEdit(l)} style={{display:"flex",alignItems:"center",gap:8,background:c.s,border:`1px solid ${lcol}40`,borderLeft:`3px solid ${lcol}`,borderRadius:10,padding:"8px 12px",cursor:"pointer",flex:1,minWidth:mob?120:180}}>
                 <div>
-                  <div style={{fontSize:13,fontWeight:700,color:lcol}}>{fm.i} {l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:lcol}}>{fm.i} {(cleanPrenom(l.prenom)||l.instagram_username?.replace(/^gcal_/,"")?.substring(0,12)||"?")}</div>
                   <div style={{fontSize:10,color:c.tx2,marginTop:1}}>{fm.l}{l.occasion?` · ${l.occasion}`:""}</div>
                   <div style={{fontSize:10,color:c.tx3,marginTop:1}}>
                     {l.heure_debut?l.heure_debut+" → "+(l.heure_fin||""):(DT[l.type_interet]?DT[l.type_interet][0]+"h00 → "+(isNuit(l.type_interet)?"12h00 J+1":DT[l.type_interet][1]+"h00"):"")}
@@ -567,7 +574,7 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
                           <div style={{flex:1,minWidth:0}}>
                             {/* Nom + badge */}
                             <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                              <div style={{fontSize:15,fontWeight:700,color:lcol}}>{l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}</div>
+                              <div style={{fontSize:15,fontWeight:700,color:lcol}}>{(cleanPrenom(l.prenom)||l.instagram_username?.replace(/^gcal_/,"")?.substring(0,12)||"?")}</div>
                               {l.statut==="reserve"&&<span style={{fontSize:9,fontWeight:600,padding:"2px 6px",borderRadius:8,background:`${c.gn}20`,color:c.gn}}>✓ Réservé</span>}
                             </div>
                             {/* Prestation */}
@@ -788,7 +795,7 @@ function MiniCard({l,c,now,lc,setEdit,FM}){
   return(
     <div onClick={e=>{e.stopPropagation();setEdit(l);}} style={{background:c.s2,borderRadius:10,padding:12,border:`0.5px solid ${c.bd}`,cursor:"pointer",borderLeft:`3px solid ${lcol}`}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div style={{fontWeight:600,fontSize:13,letterSpacing:"-0.02em"}}>{fm.i} {l.prenom?.replace(/^\w/,x=>x.toUpperCase())||"?"}{l.statut==="reserve"?" ✓":""}</div>
+        <div style={{fontWeight:600,fontSize:13,letterSpacing:"-0.02em"}}>{fm.i} {(cleanPrenom(l.prenom)||l.instagram_username?.replace(/^gcal_/,"")?.substring(0,12)||"?")}{l.statut==="reserve"?" ✓":""}</div>
         <span style={{fontSize:10,fontWeight:600,padding:"2px 7px",borderRadius:12,background:`${lcol}18`,color:lcol}}>{l.statut==="reserve"?"Réservé":l.temperature==="chaud"?"Chaud":l.temperature==="tiede"?"Tiède":"Froid"}</span>
       </div>
       <div style={{fontSize:11,color:c.tx2,marginTop:4}}>{fm.l}{l.occasion?` · ${l.occasion}`:""}</div>
