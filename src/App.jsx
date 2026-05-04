@@ -164,7 +164,12 @@ export default function App(){
     }catch(e){alert("Erreur sauvegarde");}
     setSaving(false);
   };
-  const createLead=async(data)=>{setSaving(true);try{const cl={...data};cl.instagram_username=cl.instagram_username||("manuel_"+Date.now());cl.source=cl.source||"manuel";cl.statut=cl.statut||"nouveau";cl.temperature=cl.temperature||"tiede";cl.score=cl.score||50;cl.nombre_messages=0;const r=await fetch(`${SB}/rest/v1/leads`,{method:"POST",headers:{apikey:SK,Authorization:`Bearer ${SK}`,"Content-Type":"application/json","Prefer":"return=minimal"},body:JSON.stringify(cl)});if(!r.ok)throw new Error(await r.text());await load();setCreating(false);}catch(e){alert("Erreur: "+e.message);}setSaving(false);};
+  const createLead=async(data)=>{setSaving(true);try{const cl={...data};cl.instagram_username=cl.instagram_username||("manuel_"+Date.now());cl.source=cl.source||"manuel";cl.statut=cl.statut||"nouveau";cl.temperature=cl.temperature||"tiede";cl.score=cl.score||50;cl.nombre_messages=0;
+    // Nettoyer les champs numériques — string vide → null
+    ["nombre_personnes","acompte_recu","montant_total_encaisse","prix_custom","score"].forEach(k=>{if(cl[k]===""||cl[k]===undefined)cl[k]=null;else if(cl[k]!==null)cl[k]=parseFloat(cl[k])||null;});
+    // Nettoyer les champs texte vides
+    ["heure_debut","heure_fin","email","telephone","occasion","notes","date_souhaitee"].forEach(k=>{if(cl[k]==="")cl[k]=null;});
+    const r=await fetch(`${SB}/rest/v1/leads`,{method:"POST",headers:{apikey:SK,Authorization:`Bearer ${SK}`,"Content-Type":"application/json","Prefer":"return=minimal"},body:JSON.stringify(cl)});if(!r.ok)throw new Error(await r.text());await load();setCreating(false);}catch(e){alert("Erreur: "+e.message);}setSaving(false);};
   const deleteLead=async(id)=>{
     if(!confirm("Supprimer ce prospect ?"))return;
     setSaving(true);
