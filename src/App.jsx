@@ -417,8 +417,8 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
                     const lcol=lc(l);
                     const fm=FM[l.type_interet]||{i:"?",l:"?"};
                     const hDebut=parseHDec(l.heure_debut)||(DT[l.type_interet]?.[0]||10);
-                    const hFinDefault=isNuit(l.type_interet)?(hDebut+2):(DT[l.type_interet]?.[1]||hDebut+2);
-                    const hFin=parseHDec(l.heure_fin)||hFinDefault;
+                    const hFinDefault=isNuit(l.type_interet)?23.5:(DT[l.type_interet]?.[1]||hDebut+2);
+                    const hFin=parseHDec(l.heure_fin)||(isNuit(l.type_interet)?23.5:hFinDefault);
                     const topPx=(hDebut-H_START)*SLOT_H*2;
                     const heightPx=Math.max(SLOT_H*2,(hFin-hDebut)*SLOT_H*2-2);
                     const prix=parseFloat(l.prix_custom||0)||TX[l.type_interet]||0;
@@ -467,17 +467,21 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
     // Heure début pour positionnement — custom si défini sinon défaut
     const getH=(l)=>{
       if(l.heure_debut){
-        const parts=l.heure_debut.split(":");
+        // Accepte "17:00", "17h00", "17h", "17"
+        const clean=l.heure_debut.replace("h",":");
+        const parts=clean.split(":");
         const hh=parseInt(parts[0])||10;
         const mm=parseInt(parts[1]||"0");
+        // Arrondir à la demi-heure la plus proche
         return hh+(mm>=30?0.5:0);
       }
       return DT[l.type_interet]?.[0]||10;
     };
     const getHeureLabel=(l)=>{
-      const debut=l.heure_debut||((DT[l.type_interet]?.[0]||10)+"h00");
-      const fin=l.heure_fin||(isNuit(l.type_interet)?"12h00 J+1":((DT[l.type_interet]?.[1]||12)+"h00"));
-      return debut.replace(":",":")+` → `+fin;
+      const cleanH=s=>{if(!s)return s;const c=s.replace("h",":");const p=c.split(":");return parseInt(p[0])+"h"+(parseInt(p[1]||"0")>0?parseInt(p[1]||"0"):"00");};
+      const debut=l.heure_debut?cleanH(l.heure_debut):((DT[l.type_interet]?.[0]||10)+"h00");
+      const fin=l.heure_fin?cleanH(l.heure_fin):(isNuit(l.type_interet)?"12h00 J+1":((DT[l.type_interet]?.[1]||12)+"h00"));
+      return debut+` → `+fin;
     };
 
     return(
