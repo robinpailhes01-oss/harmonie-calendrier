@@ -151,7 +151,6 @@ export default function App(){
     if(!edit?.id)return;setSaving(true);
     try{
       const cl={};
-      // Champs financiers : toujours envoyés (types mixtes string/number sinon ignorés)
       const financialKeys=["acompte_recu","montant_total_encaisse","prix_custom","moyen_paiement_solde","numero_facture","heure_debut","heure_fin"];
       for(const k in updates){
         const isDiff=String(updates[k])!==String(edit[k]??'');
@@ -160,6 +159,19 @@ export default function App(){
       }
       if(Object.keys(cl).length>0)
         await fetch(`${SB}/rest/v1/leads?id=eq.${edit.id}`,{method:"PATCH",headers:{apikey:SK,Authorization:`Bearer ${SK}`,"Content-Type":"application/json","Prefer":"return=minimal"},body:JSON.stringify(cl)});
+      // ── Sync GCal : seulement si passage en "réservé" + pas déjà de gcal_id + pas créé par Léa ──
+      const passageReserve=updates.statut==="reserve"&&edit.statut!=="reserve";
+      const currentNotes=edit.notes||"";
+      const hasGcalId=currentNotes.includes("gcal:");
+      const isLeaLead=edit.source==="instagram_dm";
+      if(passageReserve&&!hasGcalId&&!isLeaLead){
+        try{
+          await fetch("https://robinplhs.app.n8n.cloud/webhook/create-gcal-event",{
+            method:"POST",headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({lead_id:edit.id,prenom:updates.prenom||edit.prenom||"",type_interet:updates.type_interet||edit.type_interet||"",date_souhaitee:updates.date_souhaitee||edit.date_souhaitee||"",heure_debut:updates.heure_debut||edit.heure_debut||"",heure_fin:updates.heure_fin||edit.heure_fin||"",occasion:updates.occasion||edit.occasion||"",nombre_personnes:updates.nombre_personnes||edit.nombre_personnes||"",telephone:updates.telephone||edit.telephone||"",email:updates.email||edit.email||"",notes:updates.notes||edit.notes||""})
+          });
+        }catch(e){console.warn("GCal create failed:",e);}
+      }
       await load();setEdit(null);
     }catch(e){alert("Erreur sauvegarde");}
     setSaving(false);
