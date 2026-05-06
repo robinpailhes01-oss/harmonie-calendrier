@@ -586,6 +586,18 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
                               {l.source&&<span style={{fontSize:10,color:c.tx3}}>{srcIcon(l.source)} {srcLabel(l.source)}</span>}
                               {l.nombre_personnes&&<span style={{fontSize:10,color:c.tx3}}>👥 {l.nombre_personnes} pers.</span>}
                             </div>
+                            {/* Lien Instagram + dernier message */}
+                            <div style={{display:"flex",gap:8,marginTop:3,flexWrap:"wrap",alignItems:"center"}}>
+                              {l.instagram_username&&!l.instagram_username.startsWith("gcal_")&&!l.instagram_username.startsWith("manuel_")&&
+                                <a href={"https://ig.me/m/"+l.instagram_username} target="_blank" rel="noreferrer"
+                                  style={{fontSize:10,color:"#E1306C",textDecoration:"none",fontWeight:600}}
+                                  onClick={e=>e.stopPropagation()}>
+                                  📸 DM @{l.instagram_username}
+                                </a>}
+                              {l.derniere_interaction&&<span style={{fontSize:9,color:c.tx3}}>
+                                🕐 {(()=>{const ago=Math.round((now-new Date(l.derniere_interaction))/864e5);return ago===0?"Auj.":ago===1?"Hier":ago+"j";})()}
+                              </span>}
+                            </div>
                             {/* Notes */}
                             {l.notes&&<div style={{fontSize:10,color:c.tx3,marginTop:4,fontStyle:"italic"}}>{l.notes.substring(0,100)}</div>}
                             {/* Finances */}
