@@ -291,7 +291,16 @@ const cleanPrenom=p=>{
 };
 const srcIcon=s=>({instagram_dm:"📸",site_web:"🌐",whatsapp:"💬",telephone:"📞",recommandation:"⭐",manuel:"✏️"})[s]||"📋";
 const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"WhatsApp",telephone:"Tél",recommandation:"Reco",manuel:"Manuel"})[s]||s||"?";
-  const leadsForDate=d=>sortLeads(datedLeads.filter(l=>l.pd&&sameDay(l.pd,d)));
+  const leadsForDate=d=>{
+    const prevDay=new Date(d);prevDay.setDate(prevDay.getDate()-1);
+    return sortLeads(datedLeads.filter(l=>{
+      if(!l.pd)return false;
+      if(sameDay(l.pd,d))return true;
+      // Nuit de la veille : finit à 12h ce jour
+      if(isNuit(l.type_interet)&&sameDay(l.pd,prevDay))return true;
+      return false;
+    }));
+  };
 
   const goBack=()=>{if(view==="month")setCur(new Date(yr,mo-1,1));else if(view==="week"){const d=new Date(weekStart);d.setDate(d.getDate()-7);setWeekStart(new Date(d));}else{const d=new Date(dayView);d.setDate(d.getDate()-1);setDayView(new Date(d));}setSel(null);};
   const goFwd=()=>{if(view==="month")setCur(new Date(yr,mo+1,1));else if(view==="week"){const d=new Date(weekStart);d.setDate(d.getDate()+7);setWeekStart(new Date(d));}else{const d=new Date(dayView);d.setDate(d.getDate()+1);setDayView(new Date(d));}setSel(null);};
@@ -423,11 +432,12 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
                   {leadsForDate(d).map((l,li)=>{
                     const lcol=lc(l);
                     const fm=FM[l.type_interet]||{i:"?",l:"?"};
-                    const hDebut=parseHDec(l.heure_debut)||(isNuit(l.type_interet)?18:(DT[l.type_interet]?.[0]||10));
-                    // Nuit : bloque de 18h à la fin de la grille (23h) + badge "→12h J+1"
+                    const prevDayD=new Date(dayView);prevDayD.setDate(prevDayD.getDate()-1);
+                    const isNightFromPrevD=isNuit(l.type_interet)&&l.pd&&sameDay(l.pd,prevDayD);
+                    const hDebut=isNightFromPrevD?H_START:(parseHDec(l.heure_debut)||(isNuit(l.type_interet)?18:(DT[l.type_interet]?.[0]||10)));
+                    // Nuit J : 18h→fin grille | Nuit J-1 (continuation) : début grille→12h
                     const H_END_GRID=23;
-                    const hFinDefault=isNuit(l.type_interet)?H_END_GRID:(DT[l.type_interet]?.[1]||hDebut+2);
-                    const hFin=isNuit(l.type_interet)?H_END_GRID:(parseHDec(l.heure_fin)||hFinDefault);
+                    const hFin=isNightFromPrevD?12:(isNuit(l.type_interet)?H_END_GRID:(parseHDec(l.heure_fin)||(DT[l.type_interet]?.[1]||hDebut+2)));
                     const topPx=(hDebut-H_START)*SLOT_H*2;
                     const heightPx=Math.max(SLOT_H*2,(hFin-hDebut)*SLOT_H*2-2);
                     const prix=parseFloat(l.prix_custom||0)||TX[l.type_interet]||0;
@@ -562,15 +572,17 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
                 const H_START=7; // heure de début de la grille
                 const H_END_GRID_W=23; // fin de la grille semaine
                 const parseHDec=s=>{if(!s)return null;const p=s.split(":");return parseInt(p[0])+(parseInt(p[1]||"0")>=30?0.5:0);};
-                const hDebut=parseHDec(l.heure_debut)||(isNuit(l.type_interet)?18:(DT[l.type_interet]?.[0]||10));
-                // Nuit : s'étend jusqu'à la fin de la grille pour montrer que c'est bloqué
-                const hFin=isNuit(l.type_interet)?H_END_GRID_W:(parseHDec(l.heure_fin)||(DT[l.type_interet]?.[1]||hDebut+2));
+                const prevDayW=new Date(weekDays[colIdx]);prevDayW.setDate(prevDayW.getDate()-1);
+                const isNightFromPrev=isNuit(l.type_interet)&&l.pd&&sameDay(l.pd,prevDayW);
+                const hDebut=isNightFromPrev?0:(parseHDec(l.heure_debut)||(isNuit(l.type_interet)?18:(DT[l.type_interet]?.[0]||10)));
+                // Nuit J : 18h→23h fin grille | Nuit J-1 (continuation) : 0h→12h
+                const hFin=isNightFromPrev?12:(isNuit(l.type_interet)?H_END_GRID_W:(parseHDec(l.heure_fin)||(DT[l.type_interet]?.[1]||hDebut+2)));
                 const topPx=(hDebut-H_START)*SLOT_H*2; // *2 car SLOT_H = 30min
                 const heightPx=Math.max(SLOT_H,(hFin-hDebut)*SLOT_H*2-2);
                 return(
                   <div key={li} onClick={()=>setEdit(l)}
                     style={{position:"absolute",left:4,right:4,top:topPx,height:heightPx,
-                      background:`${lcol}18`,border:`0.5px solid ${lcol}50`,borderLeft:`3px solid ${lcol}`,
+                      background:isNightFromPrev?`${lcol}28`:`${lcol}18`,border:isNightFromPrev?`1px dashed ${lcol}50`:`0.5px solid ${lcol}50`,borderLeft:`3px solid ${lcol}`,
                       borderRadius:8,padding:"6px 10px",cursor:"pointer",pointerEvents:"all",
                       overflow:"hidden",boxSizing:"border-box",zIndex:2}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
