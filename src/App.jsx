@@ -786,7 +786,11 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
                       {l.date_souhaitee&&<span>· 📅 {l.date_souhaitee}</span>}
                       {l.occasion&&<span>· {l.occasion}</span>}
                       {l.source&&l.source!=="manuel"&&<span style={{background:c.s2,borderRadius:4,padding:"1px 5px",fontSize:9,color:c.tx3}}>{srcIcon(l.source)} {srcLabel(l.source)}</span>}
-                      {l.telephone&&<span style={{color:c.gn}}>· 📱</span>}
+                      {l.telephone&&<a href={"tel:"+l.telephone} onClick={e=>e.stopPropagation()} style={{color:c.gn,textDecoration:"none",fontWeight:600}}>📱 {l.telephone}</a>}
+                      {!l.telephone&&l.instagram_username&&!l.instagram_username.startsWith("gcal_")&&!l.instagram_username.startsWith("manuel_")&&
+                        <a href={"https://ig.me/m/"+l.instagram_username} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{color:"#E1306C",textDecoration:"none",fontWeight:600}}>📸 DM</a>}
+                      {l.telephone&&l.instagram_username&&!l.instagram_username.startsWith("gcal_")&&!l.instagram_username.startsWith("manuel_")&&
+                        <a href={"https://ig.me/m/"+l.instagram_username} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{color:"#E1306C",textDecoration:"none",fontWeight:600}}>📸</a>}
                       {ago!==null&&<span style={{marginLeft:"auto"}}>{ago===0?"Auj.":ago===1?"Hier":`${ago}j`}</span>}
                     </div>
                   </div>
@@ -828,8 +832,10 @@ function MiniCard({l,c,now,lc,setEdit,FM}){
       </div>
       <div style={{fontSize:11,color:c.tx2,marginTop:4}}>{fm.l}{l.occasion?` · ${l.occasion}`:""}</div>
       <div style={{display:"flex",gap:8,marginTop:6,fontSize:10,color:c.tx3,flexWrap:"wrap"}}>
-        {l.telephone&&<span style={{color:c.gn}}>📱 {l.telephone}</span>}
-        {prix>0&&<span style={{color:acompte>=prix?c.gn:acompte>0?c.or:c.tx2,fontWeight:600}}>{acompte>=prix?"Soldé":acompte>0?`${acompte}€//${prix}€`:`${prix}€`}</span>}
+        {l.telephone&&<a href={"tel:"+l.telephone} onClick={e=>e.stopPropagation()} style={{color:c.gn,textDecoration:"none",fontWeight:600}}>📱 {l.telephone}</a>}
+        {l.instagram_username&&!l.instagram_username.startsWith("gcal_")&&!l.instagram_username.startsWith("manuel_")&&
+          <a href={"https://ig.me/m/"+l.instagram_username} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{color:"#E1306C",textDecoration:"none",fontWeight:600}}>📸 DM</a>}
+        {prix>0&&<span style={{color:acompte>=prix?c.gn:acompte>0?c.or:c.tx2,fontWeight:600}}>{acompte>=prix?"Soldé":acompte>0?`${acompte}€/${prix}€`:`${prix}€`}</span>}
         {ago!==null&&<span style={{marginLeft:"auto"}}>{ago===0?"Auj.":ago===1?"Hier":`${ago}j`}</span>}
       </div>
     </div>
