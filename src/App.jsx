@@ -705,7 +705,7 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
 
       {/* NAV */}
       <div style={{display:"flex",borderBottom:`0.5px solid ${c.bd}`,overflowX:"auto"}}>
-        {[{k:"cal",l:"Calendrier"},{k:"crm",l:"Prospects"},{k:"finances",l:"Finances"}].map(t=>(
+        {[{k:"cal",l:"Calendrier"},{k:"gcal",l:"📅 Google Agenda"},{k:"crm",l:"Prospects"},{k:"finances",l:"Finances"}].map(t=>(
           <button key={t.k} onClick={()=>setMainTab(t.k)} style={{padding:"10px 16px",border:"none",borderBottom:mainTab===t.k?`2px solid ${c.ac}`:"2px solid transparent",background:"transparent",color:mainTab===t.k?c.ac:c.tx2,fontSize:mob?12:13,fontWeight:mainTab===t.k?600:400,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>
             {t.l}
           </button>
@@ -731,6 +731,22 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
       {mainTab==="cal"&&view==="week"&&<WeekView/>}
       {mainTab==="cal"&&view==="day"&&<DayView/>}
       {mainTab==="finances"&&<FinancesView c={c} mob={mob} depenses={depenses} fin={fin} allLeads={allLeads} newDep={newDep} setNewDep={setNewDep} addDepense={addDepense} deleteDepense={deleteDepense} savingDep={savingDep}/>}
+      {mainTab==="gcal"&&<div style={{width:"100%",height:"calc(100vh - 180px)",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:mob?"8px 12px":"8px 28px",background:c.s,borderBottom:`0.5px solid ${c.bd}`,display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:11,color:c.tx3}}>📅 Calendrier en temps réel — harmonieyacht@gmail.com</span>
+          <a href="https://calendar.google.com/calendar/r" target="_blank" rel="noreferrer"
+            style={{marginLeft:"auto",fontSize:11,color:c.ac,textDecoration:"none",padding:"4px 10px",border:`1px solid ${c.ac}`,borderRadius:6}}>
+            Ouvrir ↗
+          </a>
+        </div>
+        <iframe
+          src={`https://calendar.google.com/calendar/embed?src=harmonieyacht%40gmail.com&ctz=Europe%2FParis&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0&mode=WEEK&bgcolor=%23${dk?"1a1a2e":"ffffff"}&color=%230F9D58`}
+          style={{flex:1,border:"none",width:"100%"}}
+          frameBorder="0"
+          scrolling="no"
+          title="Google Calendar Harmonie Yacht"
+        />
+      </div>}
 
       {/* CRM — toujours visible */}
       <div style={{padding:mob?"0 12px 28px":"0 28px 32px"}}>
