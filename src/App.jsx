@@ -423,9 +423,11 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
                   {leadsForDate(d).map((l,li)=>{
                     const lcol=lc(l);
                     const fm=FM[l.type_interet]||{i:"?",l:"?"};
-                    const hDebut=parseHDec(l.heure_debut)||(DT[l.type_interet]?.[0]||10);
-                    const hFinDefault=isNuit(l.type_interet)?23.5:(DT[l.type_interet]?.[1]||hDebut+2);
-                    const hFin=parseHDec(l.heure_fin)||(isNuit(l.type_interet)?23.5:hFinDefault);
+                    const hDebut=parseHDec(l.heure_debut)||(isNuit(l.type_interet)?18:(DT[l.type_interet]?.[0]||10));
+                    // Nuit : bloque de 18h à la fin de la grille (23h) + badge "→12h J+1"
+                    const H_END_GRID=23;
+                    const hFinDefault=isNuit(l.type_interet)?H_END_GRID:(DT[l.type_interet]?.[1]||hDebut+2);
+                    const hFin=isNuit(l.type_interet)?H_END_GRID:(parseHDec(l.heure_fin)||hFinDefault);
                     const topPx=(hDebut-H_START)*SLOT_H*2;
                     const heightPx=Math.max(SLOT_H*2,(hFin-hDebut)*SLOT_H*2-2);
                     const prix=parseFloat(l.prix_custom||0)||TX[l.type_interet]||0;
@@ -558,10 +560,11 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
                 const heureLabel=getHeureLabel(l);
                 const SLOT_H=32; // px par slot 30min — doit correspondre à height:32 ci-dessus
                 const H_START=7; // heure de début de la grille
+                const H_END_GRID_W=23; // fin de la grille semaine
                 const parseHDec=s=>{if(!s)return null;const p=s.split(":");return parseInt(p[0])+(parseInt(p[1]||"0")>=30?0.5:0);};
-                const hDebut=parseHDec(l.heure_debut)||(DT[l.type_interet]?.[0]||10);
-                const hFinDefault=isNuit(l.type_interet)?(hDebut+19):(DT[l.type_interet]?.[1]||hDebut+2);
-                const hFin=parseHDec(l.heure_fin)||hFinDefault;
+                const hDebut=parseHDec(l.heure_debut)||(isNuit(l.type_interet)?18:(DT[l.type_interet]?.[0]||10));
+                // Nuit : s'étend jusqu'à la fin de la grille pour montrer que c'est bloqué
+                const hFin=isNuit(l.type_interet)?H_END_GRID_W:(parseHDec(l.heure_fin)||(DT[l.type_interet]?.[1]||hDebut+2));
                 const topPx=(hDebut-H_START)*SLOT_H*2; // *2 car SLOT_H = 30min
                 const heightPx=Math.max(SLOT_H,(hFin-hDebut)*SLOT_H*2-2);
                 return(
