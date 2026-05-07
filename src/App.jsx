@@ -19,11 +19,11 @@ const SOURCES=[
 const TYPES=[{v:"nuit_classique",l:"Essentielle 180€"},{v:"nuit_prestige",l:"Prestige 380€"},{v:"nuit_signature",l:"Signature 750€"},{v:"sortie_mer_2h",l:"Sortie 2h 400€"},{v:"sortie_mer_3h",l:"Sortie 3h 600€"},{v:"sortie_mer_4h",l:"Sortie 4h 800€"}];
 const STATUTS=[{v:"nouveau",l:"Nouveau"},{v:"en_conversation",l:"En conversation"},{v:"qualifie",l:"Qualifié"},{v:"reserve",l:"Réservé"},{v:"termine",l:"Terminé"},{v:"perdu",l:"Perdu"}];
 const TEMPS=[{v:"chaud",l:"Chaud"},{v:"tiede",l:"Tiède"},{v:"froid",l:"Froid"}];
-const DT={nuit_classique:[17,12],nuit_prestige:[17,12],nuit_signature:[17,12],sortie_mer_2h:[10,12],sortie_mer_3h:[10,13],sortie_mer_4h:[10,14]};
+const DT={nuit_classique:[18,12],nuit_prestige:[18,12],nuit_signature:[18,12],sortie_mer_2h:[10,12],sortie_mer_3h:[10,13],sortie_mer_4h:[10,14]};
 // Heure d'affichage dans la vue jour (heure de début pour ce jour)
 const getDTForDay=(l,isNextDay)=>{
   if(isNuit(l.type_interet)){
-    return isNextDay?{h:8,label:"8h → 12h (Départ)",fin:12}:{h:17,label:"17h → 12h J+1",fin:23};
+    return isNextDay?{h:8,label:"8h → 12h (Départ)",fin:12}:{h:18,label:"18h → 12h J+1",fin:23.5};
   }
   const dt=DT[l.type_interet]||[10,12];
   return{h:dt[0],label:dt[0]+"h → "+dt[1]+"h",fin:dt[1]};
