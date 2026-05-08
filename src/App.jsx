@@ -568,16 +568,16 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
                 const acompte=parseFloat(l.acompte_recu||0);
                 const restant=prix-acompte;
                 const heureLabel=getHeureLabel(l);
-                const SLOT_H=32; // px par slot 30min — doit correspondre à height:32 ci-dessus
-                const H_START=7; // heure de début de la grille
-                const H_END_GRID_W=23; // fin de la grille semaine
-                const parseHDec=s=>{if(!s)return null;const p=s.split(":");return parseInt(p[0])+(parseInt(p[1]||"0")>=30?0.5:0);};
-                const prevDayW=new Date(weekDays[colIdx]);prevDayW.setDate(prevDayW.getDate()-1);
-                const isNightFromPrev=isNuit(l.type_interet)&&l.pd&&sameDay(l.pd,prevDayW);
-                const hDebut=isNightFromPrev?0:(parseHDec(l.heure_debut)||(isNuit(l.type_interet)?18:(DT[l.type_interet]?.[0]||10)));
-                // Nuit J : 18h→23h fin grille | Nuit J-1 (continuation) : 0h→12h
-                const hFin=isNightFromPrev?12:(isNuit(l.type_interet)?H_END_GRID_W:(parseHDec(l.heure_fin)||(DT[l.type_interet]?.[1]||hDebut+2)));
-                const topPx=(hDebut-H_START)*SLOT_H*2; // *2 car SLOT_H = 30min
+                const SLOT_H=32;
+                const H_START=7;
+                const H_END_GRID=23;
+                const parseHDec=s=>{if(!s)return null;const p=s.replace("h",":").split(":");return parseInt(p[0])+(parseInt(p[1]||"0")>=30?0.5:0);};
+                // Nuit de la veille → continuation 0h→12h
+                const prevDayDV=new Date(dayView);prevDayDV.setDate(prevDayDV.getDate()-1);
+                const isNightFromPrev=isNuit(l.type_interet)&&l.pd&&sameDay(l.pd,prevDayDV);
+                const hDebut=isNightFromPrev?H_START:(parseHDec(l.heure_debut)||(isNuit(l.type_interet)?18:(DT[l.type_interet]?.[0]||10)));
+                const hFin=isNightFromPrev?12:(isNuit(l.type_interet)?H_END_GRID:(parseHDec(l.heure_fin)||(DT[l.type_interet]?.[1]||hDebut+2)));
+                const topPx=(hDebut-H_START)*SLOT_H*2;
                 const heightPx=Math.max(SLOT_H,(hFin-hDebut)*SLOT_H*2-2);
                 return(
                   <div key={li} onClick={()=>setEdit(l)}
