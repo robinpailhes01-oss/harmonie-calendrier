@@ -173,7 +173,7 @@ export default function App(){
         }catch(e){console.warn("GCal create failed:",e);}
       }
       await load();setEdit(null);
-    }catch(e){alert("Erreur sauvegarde");}
+    }catch(e){alert("Erreur: "+e.message);setSaving(false);return;}
     setSaving(false);
   };
   const createLead=async(data)=>{setSaving(true);try{const cl={...data};cl.instagram_username=cl.instagram_username||("manuel_"+Date.now());cl.source=cl.source||"manuel";cl.statut=cl.statut||"nouveau";cl.temperature=cl.temperature||"tiede";cl.score=cl.score||50;cl.nombre_messages=0;
@@ -823,13 +823,14 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
 function Modal({children,onClose,mob,c,saving,title,subtitle}){
   return(
     <div className="fade" onClick={()=>!saving&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(8px)",zIndex:200,display:"flex",alignItems:mob?"flex-end":"center",justifyContent:"center",padding:mob?0:20}}>
-      <div className={mob?"su":"au"} onClick={e=>e.stopPropagation()} style={{background:c.s,borderRadius:mob?"20px 20px 0 0":18,padding:mob?20:28,width:mob?"100%":480,maxHeight:mob?"90vh":"85vh",overflowY:"auto",border:`0.5px solid ${c.bd}`}}>
+      <div className={mob?"su":"au"} onClick={e=>e.stopPropagation()} style={{background:c.s,borderRadius:mob?"20px 20px 0 0":18,padding:mob?20:28,width:mob?"100%":480,maxHeight:mob?"92vh":"85vh",overflowY:"auto",WebkitOverflowScrolling:"touch",border:`0.5px solid ${c.bd}`}}>
         {mob&&<div style={{width:36,height:4,borderRadius:2,background:c.s3,margin:"0 auto 16px"}}/>}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
           <div><div style={{fontSize:11,color:c.tx3,fontWeight:500,letterSpacing:"0.04em",textTransform:"uppercase"}}>{subtitle}</div><div style={{fontSize:22,fontWeight:700,letterSpacing:"-0.03em",marginTop:2}}>{title}</div></div>
           <button onClick={onClose} disabled={saving} style={{background:c.s2,border:"none",borderRadius:10,width:32,height:32,fontSize:18,color:c.tx2,cursor:"pointer"}}>×</button>
         </div>
         {children}
+        {mob&&<div style={{height:24}}/>}
       </div>
     </div>
   );
@@ -978,7 +979,7 @@ function EditForm({lead,onSave,onDelete,onSolde,saving,c,inputStyle,labelStyle})
       <div><label style={labelStyle}>Notes</label><textarea value={f.notes} onChange={e=>upd("notes",e.target.value)} rows={3} style={{...inputStyle,resize:"vertical",fontFamily:"inherit"}}/></div>
       <div style={{display:"flex",gap:10,marginTop:8}}>
         <button onClick={()=>onDelete(lead.id)} disabled={saving} style={{background:"transparent",color:c.red,border:`0.5px solid ${c.red}`,borderRadius:12,padding:"14px 18px",fontSize:14,fontWeight:600,cursor:"pointer",opacity:saving?0.5:1}}>Supprimer</button>
-        <button onClick={()=>onSave(f)} disabled={saving} style={{flex:1,background:c.ac,color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:600,cursor:"pointer",opacity:saving?0.5:1}}>{saving?"Sauvegarde…":"Enregistrer"}</button>
+        <button onClick={()=>onSave(f)} disabled={saving} style={{flex:1,background:saving?c.tx3:c.ac,color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:600,cursor:saving?"not-allowed":"pointer",opacity:1}}>{saving?"Sauvegarde…":"Enregistrer"}</button>
       </div>
     </div>
   );
