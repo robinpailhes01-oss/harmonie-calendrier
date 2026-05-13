@@ -6,7 +6,7 @@ const MN=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Se
 const MNC=["Jan","Fév","Mar","Avr","Mai","Jui","Jul","Aoû","Sep","Oct","Nov","Déc"];
 const DL=["L","M","M","J","V","S","D"],DFLS=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
 const TX={nuit_classique:180,nuit_prestige:380,nuit_signature:750,sortie_mer_2h:400,sortie_mer_3h:600,sortie_mer_4h:800};
-const FM={nuit_classique:{c:"#007AFF",l:"Essentielle",i:"🌙"},nuit_prestige:{c:"#AF52DE",l:"Prestige",i:"✨"},nuit_signature:{c:"#C9A96E",l:"Signature",i:"👑"},sortie_mer_2h:{c:"#30D158",l:"Sortie 2h",i:"⛵"},sortie_mer_3h:{c:"#34C759",l:"Sortie 3h",i:"⛵"},sortie_mer_4h:{c:"#28BD4F",l:"Sortie 4h",i:"⛵"}};
+const FM={nuit_classique:{c:"#007AFF",l:"Essentielle",i:"🌙"},nuit_prestige:{c:"#AF52DE",l:"Prestige",i:"✨"},nuit_signature:{c:"#C9A96E",l:"Signature",i:"👑"},sortie_mer_2h:{c:"#30D158",l:"Sortie 2h",i:"⛵"},sortie_mer_3h:{c:"#34C759",l:"Sortie 3h",i:"⛵"},sortie_mer_4h:{c:"#28BD4F",l:"Sortie 4h",i:"⛵"},personnalise:{c:"#FF9500",l:"Personnalisée",i:"✏️"}};
 const SOURCES=[
   {v:"instagram_dm",l:"Instagram DM"},
   {v:"site_web",l:"Site web"},
@@ -16,7 +16,7 @@ const SOURCES=[
   {v:"manuel",l:"Manuel"},
   {v:"autre",l:"Autre"},
 ];
-const TYPES=[{v:"nuit_classique",l:"Essentielle 180€"},{v:"nuit_prestige",l:"Prestige 380€"},{v:"nuit_signature",l:"Signature 750€"},{v:"sortie_mer_2h",l:"Sortie 2h 400€"},{v:"sortie_mer_3h",l:"Sortie 3h 600€"},{v:"sortie_mer_4h",l:"Sortie 4h 800€"}];
+const TYPES=[{v:"nuit_classique",l:"Essentielle 180€"},{v:"nuit_prestige",l:"Prestige 380€"},{v:"nuit_signature",l:"Signature 750€"},{v:"sortie_mer_2h",l:"Sortie 2h 400€"},{v:"sortie_mer_3h",l:"Sortie 3h 600€"},{v:"sortie_mer_4h",l:"Sortie 4h 800€"},{v:"personnalise",l:"✏️ Personnalisée..."}];
 const STATUTS=[{v:"nouveau",l:"Nouveau"},{v:"en_conversation",l:"En conversation"},{v:"qualifie",l:"Qualifié"},{v:"reserve",l:"Réservé"},{v:"termine",l:"Terminé"},{v:"perdu",l:"Perdu"}];
 const TEMPS=[{v:"chaud",l:"Chaud"},{v:"tiede",l:"Tiède"},{v:"froid",l:"Froid"}];
 const DT={nuit_classique:[18,12],nuit_prestige:[18,12],nuit_signature:[18,12],sortie_mer_2h:[10,12],sortie_mer_3h:[10,13],sortie_mer_4h:[10,14]};
@@ -876,7 +876,7 @@ function EditForm({lead,onSave,onDelete,onSolde,saving,c,inputStyle,labelStyle})
   const[f,setF]=useState({
     prenom:lead.prenom||"",email:lead.email||"",telephone:lead.telephone||"",
     type_interet:lead.type_interet||"",date_souhaitee:lead.date_souhaitee||"",
-    source:lead.source||"manuel",occasion:lead.occasion||"",nombre_personnes:lead.nombre_personnes||"",
+    source:lead.source||"manuel",occasion:lead.occasion||"",nombre_personnes:lead.nombre_personnes||"",notes_prestation:lead.notes_prestation||"",
     statut:lead.statut||"nouveau",temperature:lead.temperature||"froid",
     score:lead.score||0,notes:lead.notes||"",
     acompte_recu:lead.acompte_recu||"",
@@ -999,7 +999,7 @@ function EditForm({lead,onSave,onDelete,onSolde,saving,c,inputStyle,labelStyle})
 }
 
 function CreateForm({onSave,saving,c,inputStyle,labelStyle}){
-  const[f,setF]=useState({prenom:"",email:"",telephone:"",type_interet:"",date_souhaitee:"",heure_debut:"",heure_fin:"",source:"manuel",occasion:"",nombre_personnes:"",statut:"nouveau",temperature:"tiede",score:50,notes:"",acompte_recu:""});
+  const[f,setF]=useState({prenom:"",email:"",telephone:"",type_interet:"",date_souhaitee:"",heure_debut:"",heure_fin:"",source:"manuel",occasion:"",nombre_personnes:"",statut:"nouveau",temperature:"tiede",score:50,notes:"",acompte_recu:"",prix_custom:"",notes_prestation:""});
   const upd=(k,v)=>setF({...f,[k]:v});
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
