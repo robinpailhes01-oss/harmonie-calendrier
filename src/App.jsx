@@ -445,12 +445,12 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
                   {leadsForDate(d).map((l,li)=>{
                     const lcol=lc(l);
                     const fm=FM[l.type_interet]||{i:"?",l:"?"};
-                    const prevDayD=new Date(dayView);prevDayD.setDate(prevDayD.getDate()-1);
+                    const prevDayD=new Date(d);prevDayD.setDate(prevDayD.getDate()-1);
                     const isNightFromPrevD=isNuit(l.type_interet)&&l.pd&&sameDay(l.pd,prevDayD);
-                    const hDebut=isNightFromPrevD?H_START:(parseHDec(l.heure_debut)||(isNuit(l.type_interet)?18:(DT[l.type_interet]?.[0]||10)));
+                    const hDebut=isNightFromPrevD?H_START:(parseHDec(l.heure_debut)||(isNuit(l.type_interet)?18:((DT[l.type_interet]?DT[l.type_interet][0]:10)||10)));
                     // Nuit J : 18h→fin grille | Nuit J-1 (continuation) : début grille→12h
                     const H_END_GRID=23;
-                    const hFin=isNightFromPrevD?12:(isNuit(l.type_interet)?H_END_GRID:(parseHDec(l.heure_fin)||(DT[l.type_interet]?.[1]||hDebut+2)));
+                    const hFin=isNightFromPrevD?12:(isNuit(l.type_interet)?H_END_GRID:(parseHDec(l.heure_fin)||((DT[l.type_interet]?DT[l.type_interet][1]:hDebut+2)||hDebut+2)));
                     const topPx=(hDebut-H_START)*SLOT_H*2;
                     const heightPx=Math.max(SLOT_H*2,(hFin-hDebut)*SLOT_H*2-2);
                     const prix=parseFloat(l.prix_custom||0)||TX[l.type_interet]||0;
@@ -507,12 +507,12 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
         // Arrondir à la demi-heure la plus proche
         return hh+(mm>=30?0.5:0);
       }
-      return DT[l.type_interet]?.[0]||10;
+      return (DT[l.type_interet]?DT[l.type_interet][0]:10)||10;
     };
     const getHeureLabel=(l)=>{
       const cleanH=s=>{if(!s)return s;const c=s.replace("h",":");const p=c.split(":");return parseInt(p[0])+"h"+(parseInt(p[1]||"0")>0?parseInt(p[1]||"0"):"00");};
-      const debut=l.heure_debut?cleanH(l.heure_debut):((DT[l.type_interet]?.[0]||10)+"h00");
-      const fin=l.heure_fin?cleanH(l.heure_fin):(isNuit(l.type_interet)?"12h00 J+1":((DT[l.type_interet]?.[1]||12)+"h00"));
+      const debut=l.heure_debut?cleanH(l.heure_debut):(((DT[l.type_interet]?DT[l.type_interet][0]:10)||10)+"h00");
+      const fin=l.heure_fin?cleanH(l.heure_fin):(isNuit(l.type_interet)?"12h00 J+1":(((DT[l.type_interet]?DT[l.type_interet][1]:12)||12)+"h00"));
       return debut+` → `+fin;
     };
 
@@ -584,12 +584,12 @@ const srcLabel=s=>({instagram_dm:"Instagram",site_web:"Site web",whatsapp:"Whats
                 const SLOT_H=32;
                 const H_START=7;
                 const H_END_GRID=23;
-                const parseHDec=s=>{if(!s)return null;const p=s.replace("h",":").split(":");return parseInt(p[0])+(parseInt(p[1]||"0")>=30?0.5:0);};
+                const parseHDec=function(s){if(!s||typeof s!=="string")return null;var ss=s.indexOf("h")>=0?s.substring(0,s.indexOf("h"))+":"+s.substring(s.indexOf("h")+1):s;var p=ss.split(":");var hh=parseInt(p[0]);if(isNaN(hh))return null;return hh+(parseInt(p[1]||"0")>=30?0.5:0);};
                 // Nuit de la veille → continuation 0h→12h
                 const prevDayDV=new Date(dayView);prevDayDV.setDate(prevDayDV.getDate()-1);
                 const isNightFromPrev=isNuit(l.type_interet)&&l.pd&&sameDay(l.pd,prevDayDV);
-                const hDebut=isNightFromPrev?H_START:(parseHDec(l.heure_debut)||(isNuit(l.type_interet)?18:(DT[l.type_interet]?.[0]||10)));
-                const hFin=isNightFromPrev?12:(isNuit(l.type_interet)?H_END_GRID:(parseHDec(l.heure_fin)||(DT[l.type_interet]?.[1]||hDebut+2)));
+                const hDebut=isNightFromPrev?H_START:(parseHDec(l.heure_debut)||(isNuit(l.type_interet)?18:((DT[l.type_interet]?DT[l.type_interet][0]:10)||10)));
+                const hFin=isNightFromPrev?12:(isNuit(l.type_interet)?H_END_GRID:(parseHDec(l.heure_fin)||((DT[l.type_interet]?DT[l.type_interet][1]:hDebut+2)||hDebut+2)));
                 const topPx=(hDebut-H_START)*SLOT_H*2;
                 const heightPx=Math.max(SLOT_H,(hFin-hDebut)*SLOT_H*2-2);
                 return(
